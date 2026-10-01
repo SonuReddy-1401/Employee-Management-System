@@ -37,7 +37,7 @@
 | :--- | :--- | :--- |
 | `POST` | `/employees` | Triggers Onboarding Saga |
 | `GET` | `/employees` | List all employees |
-| `PUT` | `/employees` | Update employee record |
+| `PUT` | `/employees/{id}` | Update employee record by ID |
 | `GET` | `/employees/{id}` | Get employee by ID |
 | `DELETE` | `/employees/{id}` | Soft delete employee |
 
