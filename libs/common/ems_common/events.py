@@ -10,6 +10,7 @@ class EventType(str, Enum):
     LEAVE_REQUESTED = "LeaveRequested"
     LEAVE_APPROVED = "LeaveApproved"
     LEAVE_REJECTED = "LeaveRejected"
+    LEAVE_CANCELLED = "LeaveCancelled"
 
 
 class EventEnvelope(BaseModel):

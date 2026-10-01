@@ -73,6 +73,19 @@
 | `GET` | `/leaves` | List leave requests |
 | `GET` | `/leaves/balance/{employee_id}` | Get leave balance for an employee |
 
+#### Payload details
+- Rules: `leave_type` `PAID` | `UNPAID`. `days` = Monday-Friday days from `start_date` to `end_date` inclusive. 422 if `end_date < start_date`, if the range crosses a calendar year, or if `days = 0` (weekend-only).
+- `POST /leaves` body `{employee_id, start_date (ISO date string), end_date (ISO date string), leave_type (PAID|UNPAID), reason (optional string)}` -> 201 leave object. Leave fields: `id`, `employee_id`, `manager_id` (snapshot of employee's manager at creation, nullable), `start_date`, `end_date`, `leave_type`, `reason`, `days`, `status`, `decided_by` (nullable), `created_at`, `updated_at`.
+  Access: EMPLOYEE and MANAGER can only create for themselves (`JWT sub == employee_id`), else 403. HR and ADMIN can create for anyone.
+  The employee is validated by calling Employee service `GET /employees/{id}`, forwarding the caller's Authorization header and correlation id. Employee not found -> 422; employee exists but status is not `ACTIVE` -> 422; Employee service unreachable or circuit open -> 503 with code `EMPLOYEE_SERVICE_UNAVAILABLE`. Only successful `ACTIVE` lookups are cached in Redis for `EMPLOYEE_CACHE_TTL_SECONDS` (cached fields: `id`, `status`, `manager_id`). If Redis is unreachable, log a warning and call the Employee service directly (never fail request due to Redis).
+  409 if the new range overlaps any of that employee's `PENDING` or `APPROVED` leaves. For `PAID` leave: 422 if `days > remaining paid balance` for the year (`UNPAID` leave skips balance check). Initial status `PENDING`. Writes `LeaveRequested` outbox event in the same transaction.
+- State machine: `PENDING` -> `APPROVED` | `REJECTED` | `CANCELLED`, `APPROVED` -> `CANCELLED`. Every transition locks the leave row (`SELECT ... FOR UPDATE`) so concurrent decisions cannot both succeed. Invalid transition -> 409.
+- `POST /leaves/{id}/approve` and `/reject`: roles MANAGER, HR, ADMIN. A MANAGER may act only if `leave.manager_id == JWT sub`, else 403. Nobody may approve or reject their own leave (`JWT sub == leave.employee_id`) -> 403. On approve of `PAID` leave, re-check balance; if insufficient -> 409. Sets `decided_by`. Writes `LeaveApproved` or `LeaveRejected` outbox event in the same transaction. 404 if the leave does not exist.
+- `POST /leaves/{id}/cancel`: allowed for the leave's own employee (`JWT sub == leave.employee_id`), HR, ADMIN, else 403. `PENDING` -> `CANCELLED` writes NO event. `APPROVED` -> `CANCELLED` writes `LeaveCancelled` outbox event. 404 if not found.
+- `GET /leaves` query params: `employee_id`, `status`, `page` (default 1), `page_size` (default 20, max 100); response `{items, total, page, page_size}`. HR and ADMIN see all. MANAGER sees leaves where `manager_id == sub OR employee_id == sub`. EMPLOYEE sees only their own (`employee_id` filter is forced to `sub`).
+- `GET /leaves/balance/{employee_id}?year=YYYY` (default current year) -> `{employee_id, year, allowance, used, remaining}`. `allowance` = `ANNUAL_PAID_LEAVE_DAYS` from env. `used` = sum of `days` of `APPROVED` `PAID` leaves whose `start_date` is in that year. HR/ADMIN any employee; others only themselves (else 403).
+- All endpoints need a valid JWT (401 otherwise).
+
 ### Payroll Service (`:8004`)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -141,12 +154,13 @@ Orchestrated inside the **Employee** service on `POST /employees`:
   - `LeaveRequested`
   - `LeaveApproved`
   - `LeaveRejected`
+  - `LeaveCancelled`
 - **Outbox Pattern**: Producers write event row in the same DB transaction; a background publisher sends it.
 - **Idempotency**: Consumers are idempotent via a `processed_events` table keyed by `event_id`.
 
 #### Event payloads
 - `EmployeeOnboarded` payload `{employee_id, name, email}`
-- `LeaveRequested`, `LeaveApproved`, `LeaveRejected` payload `{leave_id, employee_id, start_date (ISO date), end_date (ISO date), leave_type (PAID|UNPAID), days}`, where `days` = number of Monday-Friday days from `start_date` to `end_date` inclusive.
+- `LeaveRequested`, `LeaveApproved`, `LeaveRejected`, `LeaveCancelled` payload `{leave_id, employee_id, start_date (ISO date), end_date (ISO date), leave_type (PAID|UNPAID), days}`, where `days` = number of Monday-Friday days from `start_date` to `end_date` inclusive.
 
 ---
 
