@@ -32,6 +32,12 @@
 | `POST` | `/internal/users` | Creates user credentials (HR/ADMIN or internal call) |
 | `DELETE` | `/internal/users/{id}` | Deletes user credentials (compensation endpoint) |
 
+#### Payload details
+- `POST /auth/login` body `{email, password}` -> 200 `{access_token, token_type:"bearer"}`; 401 on wrong email or password (same message for both, do not reveal which).
+- `POST /internal/users` body `{id (uuid, equals the employee id), email, password, role}` -> 201 `{id, email, role}`; 409 if id or email already exists; 422 on invalid input (role must be one of ADMIN, HR, MANAGER, EMPLOYEE; password minimum length 8).
+- `DELETE /internal/users/{id}` -> 204 always, even if the user does not exist (compensation must be safe to repeat).
+- `/internal/*` endpoints need no JWT because the gateway blocks them from outside the network.
+
 ### Employee Service (`:8002`)
 | Method | Endpoint | Description / Payload |
 | :--- | :--- | :--- |
