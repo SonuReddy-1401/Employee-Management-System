@@ -670,3 +670,95 @@ async def test_delete_employee_soft_delete_and_idempotency(setup_db_and_app):
 
         get_res = await client.get(f"/employees/{emp_id}", headers=admin_headers)
         assert get_res.status_code == 404
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_saga_step4_commit_failure_triggers_both_compensations(setup_db_and_app, monkeypatch):
+    session_factory = setup_db_and_app
+
+    respx.post(f"{settings.AUTH_SERVICE_URL}/internal/users").mock(
+        return_value=httpx.Response(201, json={"status": "ok"})
+    )
+    respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
+        return_value=httpx.Response(201, json={"status": "ok"})
+    )
+    payroll_comp_route = respx.delete(url__startswith=f"{settings.PAYROLL_SERVICE_URL}/internal/profiles/").mock(
+        return_value=httpx.Response(204)
+    )
+    auth_comp_route = respx.delete(url__startswith=f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
+        return_value=httpx.Response(204)
+    )
+
+    hr_headers = make_auth_headers(role="HR")
+    email = f"commit.fail_{uuid4().hex[:4]}@example.com"
+    payload = {
+        "name": "Commit Fail User",
+        "email": email,
+        "department": "Dev",
+        "designation": "Engineer",
+        "initial_password": "Password123!",
+        "monthly_salary": 6000.00,
+    }
+
+    # Intercept commit on step 4 to force Exception
+    original_commit = AsyncSession.commit
+    commit_count = 0
+
+    async def mock_commit(self):
+        nonlocal commit_count
+        commit_count += 1
+        if commit_count == 2:  # 1st commit is step 1 PENDING_ONBOARDING, 2nd commit is step 4 ACTIVE
+            raise Exception("Simulated DB commit error in step 4")
+        return await original_commit(self)
+
+    monkeypatch.setattr(AsyncSession, "commit", mock_commit)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post("/employees", json=payload, headers=hr_headers)
+        assert res.status_code == 502
+        assert res.json()["error"]["code"] == "ONBOARDING_FAILED"
+
+        # Verify BOTH payroll and auth compensations were called
+        assert payroll_comp_route.called
+        assert auth_comp_route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_saga_payroll_compensation_exception_handled(setup_db_and_app):
+    session_factory = setup_db_and_app
+
+    respx.post(f"{settings.AUTH_SERVICE_URL}/internal/users").mock(
+        return_value=httpx.Response(201, json={"status": "ok"})
+    )
+    respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
+        return_value=httpx.Response(500, json={"error": "payroll error"})
+    )
+    # Payroll compensation raises Exception (500)
+    payroll_comp_route = respx.delete(url__startswith=f"{settings.PAYROLL_SERVICE_URL}/internal/profiles/").mock(
+        return_value=httpx.Response(500, json={"error": "comp failed"})
+    )
+    auth_comp_route = respx.delete(url__startswith=f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
+        return_value=httpx.Response(204)
+    )
+
+    hr_headers = make_auth_headers(role="HR")
+    email = f"comp.fail_{uuid4().hex[:4]}@example.com"
+    payload = {
+        "name": "Comp Fail User",
+        "email": email,
+        "department": "Dev",
+        "designation": "Engineer",
+        "initial_password": "Password123!",
+        "monthly_salary": 6000.00,
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post("/employees", json=payload, headers=hr_headers)
+        assert res.status_code == 502
+        assert res.json()["error"]["code"] == "ONBOARDING_FAILED"
+
+        # Verify auth compensation still called
+        assert auth_comp_route.called
+

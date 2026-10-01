@@ -1,4 +1,4 @@
-.PHONY: up up-dev down logs test
+.PHONY: up up-dev down logs test coverage
 
 up:
 	docker compose up -d --wait
@@ -14,3 +14,7 @@ logs:
 
 test:
 	pytest services/gateway services/auth services/employee services/leave services/payroll services/notification libs/common -v
+
+coverage:
+	python scripts/coverage.py
+
