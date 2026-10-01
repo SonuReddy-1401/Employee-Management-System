@@ -169,3 +169,33 @@ Orchestrated inside the **Employee** service on `POST /employees`:
 - **Header Propagation**: Header `X-Correlation-ID` is generated at the Gateway and propagated in all HTTP calls and async events.
 - **Health & Metrics**: `/health` and `/metrics` implemented on every service.
 - **Resilience**: Synchronous service calls use timeout + `tenacity` retry + `pybreaker` circuit breaker.
+
+---
+
+## Event Routing & Consumers
+
+- **Exchange**: Producers publish events with the event type as the routing key on topic exchange `ems.events`.
+- **Queues & DLQ**: Consumers use durable named queues (configured via environment variables), a dead-letter exchange (DLX), and a dead-letter queue (DLQ).
+- **Retry Policy**: A failing message is retried up to `MAX_DELIVERY_ATTEMPTS` (default 3); after max attempts, it is routed to the DLQ without requeue. Malformed messages land in the DLQ immediately.
+- **Idempotency**: Duplicate `event_id` values are acknowledged and skipped using the `processed_events` table.
+
+### Payroll Event Consumption
+- Consumes `LeaveApproved` and `LeaveCancelled`.
+- `LeaveApproved` with `leave_type` `UNPAID` inserts a `leave_deductions` row (unique per `leave_id`); `PAID` does nothing.
+- `LeaveCancelled` deletes the deduction row for that `leave_id` if present AND records the `leave_id` in `cancelled_leaves`, preventing any late or duplicate `LeaveApproved` event for a cancelled leave from inserting a deduction.
+
+### Notification Service Contracts
+- **Endpoints**:
+  - `GET /notifications/{employee_id}?limit=50`: Returns list of notifications ordered by `created_at` descending (`id`, `employee_id`, `event_id`, `event_type`, `message`, `created_at`). `limit` parameter defaults to 50 (max 200).
+- **Authorization**:
+  - `HR` and `ADMIN` roles may read any employee's notifications.
+  - Other roles (`EMPLOYEE`, `MANAGER`) can only read their own notifications (`token sub == employee_id`), else returns `403 FORBIDDEN`.
+  - Unauthenticated requests return `401 UNAUTHORIZED`.
+- **Event Consumption**:
+  - Consumes `EmployeeOnboarded`, `LeaveRequested`, `LeaveApproved`, `LeaveRejected`, `LeaveCancelled`.
+  - Stores exactly one notification per `event_id` for `payload.employee_id`.
+  - Logs simulated email line: `SIMULATED EMAIL to employee <id>: <message>`.
+- **Notification Messages**:
+  - `EmployeeOnboarded`: `"Welcome <name>, your account is ready."`
+  - Leave events (`LeaveRequested`, `LeaveApproved`, `LeaveRejected`, `LeaveCancelled`): `"Your <leave_type> leave from <start> to <end> (<days> days) was <requested|approved|rejected|cancelled>."`
+

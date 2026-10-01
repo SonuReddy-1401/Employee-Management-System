@@ -10,6 +10,10 @@ class PayrollSettings(CommonSettings):
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/payroll_db",
         description="Async PostgreSQL DSN",
     )
+    CONSUMER_ENABLED: bool = False
+    PAYROLL_QUEUE_NAME: str = "ems.payroll.queue"
+    PAYROLL_DLQ_NAME: str = "ems.payroll.dlq"
+    PAYROLL_DLX_NAME: str = "ems.payroll.dlx"
 
 
 settings = PayrollSettings()

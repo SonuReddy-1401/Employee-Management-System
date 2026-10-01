@@ -285,3 +285,70 @@ async def test_handle_leave_approved_idempotency_and_paid_leave(setup_db_and_app
         res = await session.execute(stmt)
         rows = list(res.scalars().all())
         assert len(rows) == 0
+
+
+@pytest.mark.asyncio
+async def test_handle_leave_cancelled_and_out_of_order(setup_db_and_app):
+    from services.payroll.app.consumer_handler import handle_payroll_event
+    from services.payroll.app.models.payroll import CancelledLeave
+
+    session_factory = setup_db_and_app
+    emp_id = uuid4()
+    leave_id = uuid4()
+
+    unpaid_approved_event = EventEnvelope(
+        event_id=uuid4(),
+        type=EventType.LEAVE_APPROVED,
+        correlation_id=uuid4(),
+        payload={
+            "leave_id": str(leave_id),
+            "employee_id": str(emp_id),
+            "start_date": "2024-06-03",
+            "end_date": "2024-06-07",
+            "leave_type": "UNPAID",
+            "days": 5,
+        },
+    )
+
+    cancelled_event = EventEnvelope(
+        event_id=uuid4(),
+        type=EventType.LEAVE_CANCELLED,
+        correlation_id=uuid4(),
+        payload={
+            "leave_id": str(leave_id),
+            "employee_id": str(emp_id),
+            "start_date": "2024-06-03",
+            "end_date": "2024-06-07",
+            "leave_type": "UNPAID",
+            "days": 5,
+        },
+    )
+
+    # 1. Approve leave -> deduction created
+    async with session_factory() as session:
+        await handle_payroll_event(session, unpaid_approved_event)
+        await session.commit()
+
+    async with session_factory() as session:
+        res = await session.execute(select(LeaveDeduction).where(LeaveDeduction.leave_id == leave_id))
+        assert res.scalar_one_or_none() is not None
+
+    # 2. Cancel leave -> deduction deleted & recorded in CancelledLeave
+    async with session_factory() as session:
+        await handle_payroll_event(session, cancelled_event)
+        await session.commit()
+
+    async with session_factory() as session:
+        res1 = await session.execute(select(LeaveDeduction).where(LeaveDeduction.leave_id == leave_id))
+        assert res1.scalar_one_or_none() is None
+        res2 = await session.execute(select(CancelledLeave).where(CancelledLeave.leave_id == leave_id))
+        assert res2.scalar_one_or_none() is not None
+
+    # 3. Out-of-order late LeaveApproved arrives AFTER LeaveCancelled -> ignored (no deduction re-added)
+    async with session_factory() as session:
+        await handle_payroll_event(session, unpaid_approved_event)
+        await session.commit()
+
+    async with session_factory() as session:
+        res3 = await session.execute(select(LeaveDeduction).where(LeaveDeduction.leave_id == leave_id))
+        assert res3.scalar_one_or_none() is None

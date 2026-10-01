@@ -58,3 +58,12 @@ class LeaveDeduction(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class CancelledLeave(Base):
+    __tablename__ = "cancelled_leaves"
+
+    leave_id: Mapped[UUID] = mapped_column(primary_key=True)
+    cancelled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

@@ -28,7 +28,34 @@ async def get_db_override():
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    stop_event = asyncio.Event()
+    consumer_task = None
+    if settings.CONSUMER_ENABLED:
+        import asyncio
+        from ems_common.consumer import run_consumer
+        from services.payroll.app.consumer_handler import handle_payroll_event
+        consumer_task = asyncio.create_task(
+            run_consumer(
+                rabbitmq_url=settings.RABBITMQ_URL,
+                exchange_name=settings.RABBITMQ_EXCHANGE,
+                queue_name=settings.PAYROLL_QUEUE_NAME,
+                dlx_name=settings.PAYROLL_DLX_NAME,
+                dlq_name=settings.PAYROLL_DLQ_NAME,
+                routing_keys=["LeaveApproved", "LeaveCancelled"],
+                session_factory=async_session_factory,
+                handler=handle_payroll_event,
+                stop_event=stop_event,
+            )
+        )
     yield
+    if consumer_task:
+        stop_event.set()
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except (Exception, asyncio.CancelledError):
+            pass
     await engine.dispose()
 
 
