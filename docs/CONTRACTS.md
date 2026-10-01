@@ -41,11 +41,21 @@
 ### Employee Service (`:8002`)
 | Method | Endpoint | Description / Payload |
 | :--- | :--- | :--- |
-| `POST` | `/employees` | Triggers Onboarding Saga |
-| `GET` | `/employees` | List all employees |
+| `POST` | `/employees` | Onboards employee; Returns employee record |
+| `GET` | `/employees` | Lists employees (supports filter/pagination) |
+| `GET` | `/employees/{id}` | Gets single employee record |
 | `PUT` | `/employees/{id}` | Update employee record by ID |
-| `GET` | `/employees/{id}` | Get employee by ID |
-| `DELETE` | `/employees/{id}` | Soft delete employee |
+| `DELETE` | `/employees/{id}` | Soft deletes employee |
+
+#### Payload details
+- Employee id is a server-generated uuid.
+- `POST /employees` body `{name, email, department, designation, manager_id (optional uuid), role (ADMIN|HR|MANAGER|EMPLOYEE, default EMPLOYEE), initial_password (min 8 chars), monthly_salary (positive decimal)}`. The last three are saga inputs: they are validated here but NEVER stored in the employee table and NEVER returned. For now (before the saga exists) it returns 201 with the employee in status `PENDING_ONBOARDING`. 409 if email already exists; 422 on invalid input or if manager_id does not refer to an existing non-deleted employee.
+- Employee response fields: `id`, `name`, `email`, `department`, `designation`, `manager_id`, `status`, `created_at`, `updated_at`.
+- `GET /employees` supports query params `page` (default 1), `page_size` (default 20, max 100) and optional `department` filter; response `{items, total, page, page_size}`. Soft-deleted employees are excluded.
+- `GET /employees/{id}` -> 404 if missing or soft-deleted.
+- `PUT /employees/{id}` body: any of `{name, email, department, designation, manager_id}`; status can NOT be changed through PUT. 404 if missing, 409 on duplicate email, 422 if manager_id equals the employee's own id or refers to a non-existing employee.
+- `DELETE /employees/{id}` -> soft delete (`deleted_at` timestamp), 204; repeating it also returns 204; 404 only if the id never existed.
+- Access: all write endpoints require role `HR` or `ADMIN`; GET endpoints require any valid JWT. Missing/invalid token 401, wrong role 403.
 
 #### Fields
 `id`, `name`, `email` (unique), `department`, `designation`, `manager_id`, `status`
