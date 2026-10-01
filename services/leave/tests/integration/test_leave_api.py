@@ -272,7 +272,6 @@ async def test_create_leave_cache_hit_and_auth_header_forwarded(setup_db_and_app
         )
         assert res1.status_code == 201
         assert emp_route.call_count == 1
-        # Assert Authorization header was forwarded to Employee service
         assert emp_route.calls.last.request.headers.get("authorization") == headers["Authorization"]
 
         # 2nd call -> served from Redis cache!
@@ -287,7 +286,7 @@ async def test_create_leave_cache_hit_and_auth_header_forwarded(setup_db_and_app
             headers=headers,
         )
         assert res2.status_code == 201
-        assert emp_route.call_count == 1  # Still 1!
+        assert emp_route.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -300,7 +299,6 @@ async def test_create_leave_redis_unreachable_fallback(setup_db_and_app):
         )
     )
 
-    # Inject EmployeeClient with invalid Redis URL
     app.state.employee_client = EmployeeClient(
         employee_service_url=settings.EMPLOYEE_SERVICE_URL,
         redis_url="redis://invalid-host:6379/0",
@@ -387,6 +385,141 @@ async def test_create_leave_overlap_409(setup_db_and_app):
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_create_leave_paid_over_balance_422_and_unpaid_allowed(setup_db_and_app):
+    emp_id = str(uuid4())
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": None}
+        )
+    )
+    headers = make_auth_headers(role="EMPLOYEE", user_id=emp_id)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Create PAID leave for 15 days (June 1 to June 19)
+        res1 = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-06-01",
+                "end_date": "2026-06-19",
+                "leave_type": "PAID",
+            },
+            headers=headers,
+        )
+        assert res1.status_code == 201
+
+        # Approve leave so it counts as used
+        hr_headers = make_auth_headers(role="HR")
+        await client.post(f"/leaves/{res1.json()['id']}/approve", headers=hr_headers)
+
+        # Attempt 10 more PAID days (15 + 10 = 25 > 20) -> 422
+        res2 = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-07-01",
+                "end_date": "2026-07-14",
+                "leave_type": "PAID",
+            },
+            headers=headers,
+        )
+        assert res2.status_code == 422
+        assert res2.json()["error"]["code"] == "INSUFFICIENT_LEAVE_BALANCE"
+
+        # UNPAID leave for 10 days -> 201 (unpaid skips balance check!)
+        res3 = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-07-01",
+                "end_date": "2026-07-14",
+                "leave_type": "UNPAID",
+            },
+            headers=headers,
+        )
+        assert res3.status_code == 201
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_approve_leave_by_own_manager_works(setup_db_and_app):
+    session_factory = setup_db_and_app
+    emp_id = str(uuid4())
+    mgr_id = str(uuid4())
+
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": mgr_id}
+        )
+    )
+
+    emp_headers = make_auth_headers(role="EMPLOYEE", user_id=emp_id)
+    mgr_headers = make_auth_headers(role="MANAGER", user_id=mgr_id)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_res = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-10-05",
+                "end_date": "2026-10-09",
+                "leave_type": "PAID",
+            },
+            headers=emp_headers,
+        )
+        leave_id = create_res.json()["id"]
+
+        res_ok = await client.post(f"/leaves/{leave_id}/approve", headers=mgr_headers)
+        assert res_ok.status_code == 200
+        assert res_ok.json()["status"] == "APPROVED"
+        assert res_ok.json()["decided_by"] == mgr_id
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_approve_leave_permissions_and_forbidden(setup_db_and_app):
+    emp_id = str(uuid4())
+    mgr_id = str(uuid4())
+    other_mgr_id = str(uuid4())
+
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": mgr_id}
+        )
+    )
+
+    emp_headers = make_auth_headers(role="EMPLOYEE", user_id=emp_id)
+    other_mgr_headers = make_auth_headers(role="MANAGER", user_id=other_mgr_id)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_res = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-10-12",
+                "end_date": "2026-10-16",
+                "leave_type": "PAID",
+            },
+            headers=emp_headers,
+        )
+        leave_id = create_res.json()["id"]
+
+        # Different MANAGER approves -> 403
+        res_other = await client.post(f"/leaves/{leave_id}/approve", headers=other_mgr_headers)
+        assert res_other.status_code == 403
+
+        # Self approve (if manager role for own leave) -> 403
+        emp_as_mgr_headers = make_auth_headers(role="MANAGER", user_id=emp_id)
+        res_self = await client.post(f"/leaves/{leave_id}/approve", headers=emp_as_mgr_headers)
+        assert res_self.status_code == 403
+
+        # EMPLOYEE approves -> 403
+        res_emp_app = await client.post(f"/leaves/{leave_id}/approve", headers=emp_headers)
+        assert res_emp_app.status_code == 403
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_approve_leave_by_hr_works(setup_db_and_app):
     emp_id = str(uuid4())
     respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
@@ -413,6 +546,201 @@ async def test_approve_leave_by_hr_works(setup_db_and_app):
         res_hr = await client.post(f"/leaves/{leave_id}/approve", headers=hr_headers)
         assert res_hr.status_code == 200
         assert res_hr.json()["status"] == "APPROVED"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_second_approve_returns_409_and_single_outbox_row(setup_db_and_app):
+    session_factory = setup_db_and_app
+    emp_id = str(uuid4())
+    hr_headers = make_auth_headers(role="HR")
+
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": None}
+        )
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_res = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-10-19",
+                "end_date": "2026-10-23",
+                "leave_type": "PAID",
+            },
+            headers=hr_headers,
+        )
+        leave_id = create_res.json()["id"]
+
+        # First approve -> 200
+        res_ok = await client.post(f"/leaves/{leave_id}/approve", headers=hr_headers)
+        assert res_ok.status_code == 200
+
+        # Second approve -> 409
+        res_dup = await client.post(f"/leaves/{leave_id}/approve", headers=hr_headers)
+        assert res_dup.status_code == 409
+
+        # Verify exactly ONE LeaveApproved outbox row
+        async with session_factory() as session:
+            stmt = select(OutboxMessage).where(
+                OutboxMessage.event_type == "LeaveApproved",
+                OutboxMessage.payload.like(f"%{leave_id}%"),
+            )
+            outbox_res = await session.execute(stmt)
+            msgs = list(outbox_res.scalars().all())
+            assert len(msgs) == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_reject_leave_writes_outbox(setup_db_and_app):
+    session_factory = setup_db_and_app
+    emp_id = str(uuid4())
+    hr_headers = make_auth_headers(role="HR")
+
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": None}
+        )
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_res = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-11-02",
+                "end_date": "2026-11-06",
+                "leave_type": "PAID",
+            },
+            headers=hr_headers,
+        )
+        leave_id = create_res.json()["id"]
+
+        # HR rejects -> 200
+        res_rej = await client.post(f"/leaves/{leave_id}/reject", headers=hr_headers)
+        assert res_rej.status_code == 200
+        assert res_rej.json()["status"] == "REJECTED"
+
+        # Verify LeaveRejected outbox event
+        async with session_factory() as session:
+            stmt = select(OutboxMessage).where(
+                OutboxMessage.event_type == "LeaveRejected",
+                OutboxMessage.payload.like(f"%{leave_id}%"),
+            )
+            outbox_res = await session.execute(stmt)
+            assert len(list(outbox_res.scalars().all())) == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cancel_pending_leave_no_event(setup_db_and_app):
+    session_factory = setup_db_and_app
+    emp_id = str(uuid4())
+    emp_headers = make_auth_headers(role="EMPLOYEE", user_id=emp_id)
+
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": None}
+        )
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res1 = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-12-01",
+                "end_date": "2026-12-04",
+                "leave_type": "PAID",
+            },
+            headers=emp_headers,
+        )
+        l1_id = res1.json()["id"]
+
+        cancel1 = await client.post(f"/leaves/{l1_id}/cancel", headers=emp_headers)
+        assert cancel1.status_code == 200
+        assert cancel1.json()["status"] == "CANCELLED"
+
+        async with session_factory() as session:
+            stmt = select(OutboxMessage).where(OutboxMessage.payload.like(f"%{l1_id}%"))
+            res_out1 = await session.execute(stmt)
+            events = [msg.event_type for msg in res_out1.scalars().all()]
+            assert "LeaveCancelled" not in events
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cancel_approved_leave_writes_event(setup_db_and_app):
+    session_factory = setup_db_and_app
+    emp_id = str(uuid4())
+    emp_headers = make_auth_headers(role="EMPLOYEE", user_id=emp_id)
+    hr_headers = make_auth_headers(role="HR")
+
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": None}
+        )
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res2 = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-12-14",
+                "end_date": "2026-12-18",
+                "leave_type": "PAID",
+            },
+            headers=emp_headers,
+        )
+        l2_id = res2.json()["id"]
+        await client.post(f"/leaves/{l2_id}/approve", headers=hr_headers)
+
+        cancel2 = await client.post(f"/leaves/{l2_id}/cancel", headers=emp_headers)
+        assert cancel2.status_code == 200
+        assert cancel2.json()["status"] == "CANCELLED"
+
+        async with session_factory() as session:
+            stmt = select(OutboxMessage).where(
+                OutboxMessage.event_type == "LeaveCancelled",
+                OutboxMessage.payload.like(f"%{l2_id}%"),
+            )
+            res_out2 = await session.execute(stmt)
+            assert len(list(res_out2.scalars().all())) == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cancel_rejected_leave_returns_409(setup_db_and_app):
+    emp_id = str(uuid4())
+    emp_headers = make_auth_headers(role="EMPLOYEE", user_id=emp_id)
+    hr_headers = make_auth_headers(role="HR")
+
+    respx.get(f"{settings.EMPLOYEE_SERVICE_URL}/employees/{emp_id}").mock(
+        return_value=httpx.Response(
+            200, json={"id": emp_id, "status": "ACTIVE", "manager_id": None}
+        )
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res3 = await client.post(
+            "/leaves",
+            json={
+                "employee_id": emp_id,
+                "start_date": "2026-12-21",
+                "end_date": "2026-12-25",
+                "leave_type": "PAID",
+            },
+            headers=emp_headers,
+        )
+        l3_id = res3.json()["id"]
+        await client.post(f"/leaves/{l3_id}/reject", headers=hr_headers)
+
+        cancel3 = await client.post(f"/leaves/{l3_id}/cancel", headers=emp_headers)
+        assert cancel3.status_code == 409
 
 
 @pytest.mark.asyncio
