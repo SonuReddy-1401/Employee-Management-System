@@ -119,60 +119,110 @@ async def test_unauthorized_and_forbidden_access(setup_db_and_app):
         assert res_list_emp.status_code == 200
 
 
+# REQUIREMENT (a): happy path
 @pytest.mark.asyncio
 @respx.mock
 async def test_create_employee_success_and_fields(setup_db_and_app):
     session_factory = setup_db_and_app
 
-    respx.post(f"{settings.AUTH_SERVICE_URL}/internal/users").mock(
+    auth_route = respx.post(f"{settings.AUTH_SERVICE_URL}/internal/users").mock(
         return_value=httpx.Response(201, json={"status": "ok"})
     )
-    respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
+    payroll_route = respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
         return_value=httpx.Response(201, json={"status": "ok"})
     )
 
+    corr_id = f"test-corr-{uuid4().hex[:6]}"
     hr_headers = make_auth_headers(role="HR")
+    hr_headers["X-Correlation-ID"] = corr_id
+
+    secret_password = "SecretPassword123!"
+    secret_salary = 7500.00
     payload = {
         "name": "John Doe",
         "email": f"john.doe_{uuid4().hex[:4]}@example.com",
         "department": "Engineering",
         "designation": "Senior Engineer",
         "role": "EMPLOYEE",
-        "initial_password": "InitialPassword123!",
-        "monthly_salary": 7500.00,
+        "initial_password": secret_password,
+        "monthly_salary": secret_salary,
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.post("/employees", json=payload, headers=hr_headers)
         assert res.status_code == 201
         data = res.json()
-        assert "id" in data
+        emp_id = data["id"]
         assert data["name"] == "John Doe"
         assert data["department"] == "Engineering"
         assert data["designation"] == "Senior Engineer"
         assert data["status"] == "ACTIVE"
         assert data["manager_id"] is None
-        # Verify saga inputs are NOT in response
+        # Verify saga inputs absent from HTTP response
         assert "initial_password" not in data
         assert "monthly_salary" not in data
 
-        # Verify outbox row created
-        emp_id = data["id"]
+        # Verify Auth called EXACTLY ONCE with correct body
+        assert auth_route.call_count == 1
+        auth_req_body = json.loads(auth_route.calls.last.request.content)
+        assert auth_req_body == {
+            "id": emp_id,
+            "email": payload["email"],
+            "password": secret_password,
+            "role": "EMPLOYEE",
+        }
+
+        # Verify Payroll called EXACTLY ONCE with correct body
+        assert payroll_route.call_count == 1
+        payroll_req_body = json.loads(payroll_route.calls.last.request.content)
+        assert payroll_req_body == {
+            "employee_id": emp_id,
+            "monthly_salary": secret_salary,
+        }
+
+        # Verify Outbox row created: exactly one EmployeeOnboarded with payload & correlation ID
         async with session_factory() as session:
             stmt = select(OutboxMessage).where(OutboxMessage.payload.like(f"%{emp_id}%"))
             outbox_res = await session.execute(stmt)
             outbox_msgs = list(outbox_res.scalars().all())
             assert len(outbox_msgs) == 1
-            assert outbox_msgs[0].event_type == "EmployeeOnboarded"
+            outbox_msg = outbox_msgs[0]
+            assert outbox_msg.event_type == "EmployeeOnboarded"
+            assert json.loads(outbox_msg.payload) == {
+                "employee_id": emp_id,
+                "name": "John Doe",
+                "email": payload["email"],
+            }
+            assert outbox_msg.correlation_id == corr_id
+
+            # Verify password and salary absent from EVERY column of EVERY employee-service database table
+            emp_stmt = select(Employee).where(Employee.id == UUID(emp_id))
+            emp_db_res = await session.execute(emp_stmt)
+            emp_obj = emp_db_res.scalar_one()
+
+            # Check all text/string attributes of employee record
+            for attr in ["name", "email", "department", "designation", "status"]:
+                val = str(getattr(emp_obj, attr, ""))
+                assert secret_password not in val
+                assert str(secret_salary) not in val
+                assert "7500" not in val
+
+            # Check all columns of outbox record
+            for attr in ["id", "event_type", "payload", "correlation_id"]:
+                val = str(getattr(outbox_msg, attr, ""))
+                assert secret_password not in val
+                assert str(secret_salary) not in val
+                assert "7500" not in val
 
 
+# REQUIREMENT (f): 422 validation & 409 duplicate email cause ZERO calls to Auth or Payroll
 @pytest.mark.asyncio
 @respx.mock
 async def test_create_employee_duplicate_email(setup_db_and_app):
-    respx.post(f"{settings.AUTH_SERVICE_URL}/internal/users").mock(
+    auth_route = respx.post(f"{settings.AUTH_SERVICE_URL}/internal/users").mock(
         return_value=httpx.Response(201, json={"status": "ok"})
     )
-    respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
+    payroll_route = respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
         return_value=httpx.Response(201, json={"status": "ok"})
     )
 
@@ -191,9 +241,16 @@ async def test_create_employee_duplicate_email(setup_db_and_app):
         res1 = await client.post("/employees", json=payload, headers=hr_headers)
         assert res1.status_code == 201
 
+        calls_auth_before = auth_route.call_count
+        calls_payroll_before = payroll_route.call_count
+
         res2 = await client.post("/employees", json=payload, headers=hr_headers)
         assert res2.status_code == 409
         assert res2.json()["error"]["code"] == "CONFLICT"
+
+        # Assert ZERO additional calls to Auth or Payroll on 409
+        assert auth_route.call_count == calls_auth_before
+        assert payroll_route.call_count == calls_payroll_before
 
 
 @pytest.mark.asyncio
@@ -222,10 +279,13 @@ async def test_create_employee_invalid_manager(setup_db_and_app):
         res = await client.post("/employees", json=payload, headers=hr_headers)
         assert res.status_code == 422
         assert res.json()["error"]["code"] == "VALIDATION_ERROR"
+
+        # Assert ZERO calls to Auth or Payroll on 422
         assert not auth_route.called
         assert not payroll_route.called
 
 
+# REQUIREMENT (b): payroll failure & requirement (g): GET ONBOARDING_FAILED employee
 @pytest.mark.asyncio
 @respx.mock
 async def test_saga_payroll_500_failure_and_compensation(setup_db_and_app):
@@ -237,7 +297,7 @@ async def test_saga_payroll_500_failure_and_compensation(setup_db_and_app):
     payroll_route = respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
         return_value=httpx.Response(500, json={"error": "db error"})
     )
-    auth_comp_route = respx.delete(f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
+    auth_comp_route = respx.delete(url__startswith=f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
         return_value=httpx.Response(204)
     )
 
@@ -257,7 +317,7 @@ async def test_saga_payroll_500_failure_and_compensation(setup_db_and_app):
         assert res.status_code == 502
         assert res.json()["error"]["code"] == "ONBOARDING_FAILED"
 
-        # Check DB status is ONBOARDING_FAILED and NO outbox row
+        # Check DB status is ONBOARDING_FAILED and ZERO outbox rows
         async with session_factory() as session:
             stmt = select(Employee).where(Employee.email == email)
             emp_res = await session.execute(stmt)
@@ -268,12 +328,18 @@ async def test_saga_payroll_500_failure_and_compensation(setup_db_and_app):
             outbox_res = await session.execute(outbox_stmt)
             assert len(list(outbox_res.scalars().all())) == 0
 
-        # Verify GET /employees/{id} returns 200 with status ONBOARDING_FAILED
+        # Verify Auth compensation DELETE called EXACTLY ONCE with correct user id URL
+        assert auth_comp_route.call_count == 1
+        comp_url_path = auth_comp_route.calls.last.request.url.path
+        assert comp_url_path == f"/internal/users/{emp.id}"
+
+        # REQUIREMENT (g): Verify GET /employees/{id} returns 200 with status ONBOARDING_FAILED
         res_get = await client.get(f"/employees/{emp.id}", headers=hr_headers)
         assert res_get.status_code == 200
         assert res_get.json()["status"] == "ONBOARDING_FAILED"
 
 
+# REQUIREMENT (c): auth failure
 @pytest.mark.asyncio
 @respx.mock
 async def test_saga_auth_500_failure_no_compensation(setup_db_and_app):
@@ -285,7 +351,7 @@ async def test_saga_auth_500_failure_no_compensation(setup_db_and_app):
     payroll_route = respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
         return_value=httpx.Response(201, json={"status": "ok"})
     )
-    auth_comp_route = respx.delete(f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
+    auth_comp_route = respx.delete(url__startswith=f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
         return_value=httpx.Response(204)
     )
 
@@ -314,7 +380,13 @@ async def test_saga_auth_500_failure_no_compensation(setup_db_and_app):
             emp = emp_res.scalar_one()
             assert emp.status == "ONBOARDING_FAILED"
 
+            # Assert ZERO outbox rows
+            outbox_stmt = select(OutboxMessage).where(OutboxMessage.payload.like(f"%{emp.id}%"))
+            outbox_res = await session.execute(outbox_stmt)
+            assert len(list(outbox_res.scalars().all())) == 0
 
+
+# REQUIREMENT (d): payroll fails and Auth compensation also fails
 @pytest.mark.asyncio
 @respx.mock
 async def test_saga_payroll_fails_and_auth_compensation_fails(setup_db_and_app):
@@ -326,7 +398,7 @@ async def test_saga_payroll_fails_and_auth_compensation_fails(setup_db_and_app):
     respx.post(f"{settings.PAYROLL_SERVICE_URL}/internal/profiles").mock(
         return_value=httpx.Response(500, json={"error": "payroll fail"})
     )
-    respx.delete(f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
+    respx.delete(url__startswith=f"{settings.AUTH_SERVICE_URL}/internal/users/").mock(
         return_value=httpx.Response(500, json={"error": "comp fail"})
     )
 
@@ -353,13 +425,19 @@ async def test_saga_payroll_fails_and_auth_compensation_fails(setup_db_and_app):
             assert emp.status == "ONBOARDING_FAILED"
 
 
+# REQUIREMENT (e): circuit breaker fast failure & reset fixture
+@pytest.fixture
+def reset_circuit_breaker():
+    breaker = create_circuit_breaker(fail_max=2, reset_timeout=30.0)
+    yield breaker
+    breaker.close()
+
+
 @pytest.mark.asyncio
 @respx.mock
-async def test_saga_circuit_breaker_fast_failure(setup_db_and_app):
+async def test_saga_circuit_breaker_fast_failure(setup_db_and_app, reset_circuit_breaker):
     session_factory = setup_db_and_app
-
-    # Create a custom breaker with fail_max=2 for fast test
-    custom_breaker = create_circuit_breaker(fail_max=2, reset_timeout=30.0)
+    custom_breaker = reset_circuit_breaker
     client = ResilientHTTPClient(breaker=custom_breaker)
 
     respx.post(f"{settings.AUTH_SERVICE_URL}/internal/users").mock(
@@ -400,7 +478,7 @@ async def test_saga_circuit_breaker_fast_failure(setup_db_and_app):
             )
         assert exc2.value.status_code == 502
 
-        # 3rd attempt: Breaker is OPEN -> fails fast with 502 without calling payroll route again
+        # 3rd attempt: Breaker is OPEN -> fails fast with 502 without hitting payroll route again
         calls_before = payroll_route.call_count
         with pytest.raises(EMSError) as exc3:
             await saga.execute(
@@ -415,8 +493,6 @@ async def test_saga_circuit_breaker_fast_failure(setup_db_and_app):
             )
         assert exc3.value.status_code == 502
         assert payroll_route.call_count == calls_before
-
-    custom_breaker.close()
 
 
 @pytest.mark.asyncio
