@@ -35,9 +35,9 @@ def test_validate_leave_range():
     assert exc1.value.status_code == 422
     assert exc1.value.code == "VALIDATION_ERROR"
 
-    # Crosses year -> 422
+    # Crosses year (Dec 30 to Jan 2) -> 422
     with pytest.raises(EMSError) as exc2:
-        validate_leave_range(date(2026, 12, 30), date(2027, 1, 4))
+        validate_leave_range(date(2026, 12, 30), date(2027, 1, 2))
     assert exc2.value.status_code == 422
     assert exc2.value.code == "VALIDATION_ERROR"
 
@@ -47,8 +47,11 @@ def test_validate_leave_range():
     assert exc3.value.status_code == 422
     assert exc3.value.code == "VALIDATION_ERROR"
 
-    # Valid -> returns count
+    # Valid leave in current year -> returns count
     assert validate_leave_range(date(2026, 6, 1), date(2026, 6, 5)) == 5
+
+    # Valid leave in next year -> returns count
+    assert validate_leave_range(date(2027, 6, 7), date(2027, 6, 11)) == 5
 
 
 def test_leave_state_machine_valid_and_invalid():
