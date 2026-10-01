@@ -199,3 +199,41 @@ Orchestrated inside the **Employee** service on `POST /employees`:
   - `EmployeeOnboarded`: `"Welcome <name>, your account is ready."`
   - Leave events (`LeaveRequested`, `LeaveApproved`, `LeaveRejected`, `LeaveCancelled`): `"Your <leave_type> leave from <start> to <end> (<days> days) was <requested|approved|rejected|cancelled>."`
 
+---
+
+## Gateway Payload Details
+
+- **Routing by path prefix**:
+  - `/auth` -> Auth service (`:8001`)
+  - `/employees` -> Employee service (`:8002`)
+  - `/leaves` -> Leave service (`:8003`)
+  - `/payroll` and `/payslips` -> Payroll service (`:8004`)
+  - `/notifications` -> Notification service (`:8005`)
+  - Any other path -> HTTP 404 with project error format (`{"error": {"code": "NOT_FOUND", "message": "..."}}`).
+
+- **Internal path blocking**:
+  - Any path starting with `/internal` (any HTTP method) -> HTTP 404 with project error format (`{"error": {"code": "NOT_FOUND", "message": "..."}}`), never forwarded to upstreams.
+
+- **Authentication & Permissions**:
+  - **Public endpoints (no JWT required)**: `POST /auth/login`, `GET /health`, `GET /metrics` (the gateway's own).
+  - **Protected endpoints**: Every other routed path requires a valid JWT Bearer token in the `Authorization` header, else returns HTTP 401 with project error format (`{"error": {"code": "UNAUTHORIZED", "message": "..."}}`).
+  - Header forwarding: The `Authorization` header is forwarded unchanged to upstream services; downstream services still verify JWT claims themselves.
+
+- **Correlation ID Tracking**:
+  - `X-Correlation-ID` header is processed via `ems_common` correlation middleware. The same ID is sent to upstream services and returned in the HTTP response client header.
+
+- **Rate Limiting**:
+  - In-memory fixed window per client IP (`request.client.host`).
+  - General limit: `RATE_LIMIT_REQUESTS` requests per `RATE_LIMIT_WINDOW_SECONDS`.
+  - Stricter limit for `POST /auth/login`: `LOGIN_RATE_LIMIT_REQUESTS` requests per `RATE_LIMIT_WINDOW_SECONDS`.
+  - Exceeded limit -> HTTP 429 with `Retry-After` header and project error format code `RATE_LIMITED`.
+  - `/health` and `/metrics` are exempt from rate limiting.
+  - Expired window entries are automatically cleaned up to prevent memory leaks. Counters are per gateway instance.
+
+- **Upstream Failures**:
+  - Upstream connection error -> HTTP 502 with error code `UPSTREAM_UNAVAILABLE`.
+  - Upstream timeout -> HTTP 504 with error code `UPSTREAM_TIMEOUT`.
+  - Upstream status codes, bodies, and relevant headers pass through unchanged otherwise.
+  - The gateway **NEVER** retries requests (preventing duplicate resource creation).
+
+

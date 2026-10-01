@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -32,7 +33,6 @@ async def lifespan(app: FastAPI):
     stop_event = asyncio.Event()
     consumer_task = None
     if settings.CONSUMER_ENABLED:
-        import asyncio
         from ems_common.consumer import run_consumer
         from services.payroll.app.consumer_handler import handle_payroll_event
         consumer_task = asyncio.create_task(

@@ -1,0 +1,22 @@
+name: ems-stack
+
+services:
+  auth:
+    ports:
+      - "8001:8001"
+
+  employee:
+    ports:
+      - "8002:8002"
+
+  leave:
+    ports:
+      - "8003:8003"
+
+  payroll:
+    ports:
+      - "8004:8004"
+
+  notification:
+    ports:
+      - "8005:8005"

@@ -1,0 +1,291 @@
+name: ems-stack
+
+services:
+  # ---------------------------------------------------------------------------
+  # Databases & Infrastructure
+  # ---------------------------------------------------------------------------
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      POSTGRES_DB: ${AUTH_DB_NAME}
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER} -d ${AUTH_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  employee-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${EMPLOYEE_DB_USER}
+      POSTGRES_PASSWORD: ${EMPLOYEE_DB_PASSWORD}
+      POSTGRES_DB: ${EMPLOYEE_DB_NAME}
+    volumes:
+      - employee-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${EMPLOYEE_DB_USER} -d ${EMPLOYEE_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  leave-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${LEAVE_DB_USER}
+      POSTGRES_PASSWORD: ${LEAVE_DB_PASSWORD}
+      POSTGRES_DB: ${LEAVE_DB_NAME}
+    volumes:
+      - leave-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LEAVE_DB_USER} -d ${LEAVE_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  payroll-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${PAYROLL_DB_USER}
+      POSTGRES_PASSWORD: ${PAYROLL_DB_PASSWORD}
+      POSTGRES_DB: ${PAYROLL_DB_NAME}
+    volumes:
+      - payroll-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAYROLL_DB_USER} -d ${PAYROLL_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  notification-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${NOTIFICATION_DB_USER}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER} -d ${NOTIFICATION_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Application Services
+  # ---------------------------------------------------------------------------
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    environment:
+      DATABASE_URL: ${AUTH_DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  employee:
+    build:
+      context: .
+      dockerfile: services/employee/Dockerfile
+    environment:
+      DATABASE_URL: ${EMPLOYEE_DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      AUTH_SERVICE_URL: ${EMPLOYEE_AUTH_SERVICE_URL}
+      PAYROLL_SERVICE_URL: ${EMPLOYEE_PAYROLL_SERVICE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      OUTBOX_PUBLISHER_ENABLED: ${OUTBOX_PUBLISHER_ENABLED}
+    depends_on:
+      employee-db:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      payroll:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  leave:
+    build:
+      context: .
+      dockerfile: services/leave/Dockerfile
+    environment:
+      DATABASE_URL: ${LEAVE_DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      EMPLOYEE_SERVICE_URL: ${LEAVE_EMPLOYEE_SERVICE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      ANNUAL_PAID_LEAVE_DAYS: ${ANNUAL_PAID_LEAVE_DAYS}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      OUTBOX_PUBLISHER_ENABLED: ${OUTBOX_PUBLISHER_ENABLED}
+    depends_on:
+      leave-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      employee:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  payroll:
+    build:
+      context: .
+      dockerfile: services/payroll/Dockerfile
+    environment:
+      DATABASE_URL: ${PAYROLL_DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      CONSUMER_ENABLED: ${CONSUMER_ENABLED}
+    depends_on:
+      payroll-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  notification:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    environment:
+      DATABASE_URL: ${NOTIFICATION_DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      CONSUMER_ENABLED: ${CONSUMER_ENABLED}
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      AUTH_SERVICE_URL: ${GATEWAY_AUTH_SERVICE_URL}
+      EMPLOYEE_SERVICE_URL: ${GATEWAY_EMPLOYEE_SERVICE_URL}
+      LEAVE_SERVICE_URL: ${GATEWAY_LEAVE_SERVICE_URL}
+      PAYROLL_SERVICE_URL: ${GATEWAY_PAYROLL_SERVICE_URL}
+      NOTIFICATION_SERVICE_URL: ${GATEWAY_NOTIFICATION_SERVICE_URL}
+      UPSTREAM_TIMEOUT_SECONDS: ${UPSTREAM_TIMEOUT_SECONDS}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS}
+      LOGIN_RATE_LIMIT_REQUESTS: ${LOGIN_RATE_LIMIT_REQUESTS}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+    depends_on:
+      auth:
+        condition: service_healthy
+      employee:
+        condition: service_healthy
+      leave:
+        condition: service_healthy
+      payroll:
+        condition: service_healthy
+      notification:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Observability
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  auth-db-data:
+  employee-db-data:
+  leave-db-data:
+  payroll-db-data:
+  notification-db-data:

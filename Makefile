@@ -1,0 +1,16 @@
+.PHONY: up up-dev down logs test
+
+up:
+	docker compose up -d --wait
+
+up-dev:
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
+
+down:
+	docker compose down -v
+
+logs:
+	docker compose logs -f
+
+test:
+	pytest services/gateway services/auth services/employee services/leave services/payroll services/notification libs/common -v
