@@ -165,3 +165,136 @@ async def test_list_notifications_permissions(setup_db_and_app, jwt_secret):
         # 4. Missing token -> 401
         r4 = await ac.get(f"/notifications/{emp1_id}")
         assert r4.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_n4_list_notifications_limit_and_descending_order(setup_db_and_app, jwt_secret):
+    import asyncio
+    session_factory = setup_db_and_app
+    emp_id = uuid4()
+
+    # Create 3 notifications sequentially with small delay
+    for i in range(3):
+        envelope = EventEnvelope(
+            event_id=uuid4(),
+            type=EventType.EMPLOYEE_ONBOARDED,
+            correlation_id=uuid4(),
+            payload={"employee_id": str(emp_id), "name": f"User {i}"},
+        )
+        async with session_factory() as session:
+            await handle_notification_event(session, envelope)
+            await session.commit()
+        await asyncio.sleep(0.01)
+
+    token = create_token(str(emp_id), "EMPLOYEE", jwt_secret)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # Test limit parameter
+        res_limit = await ac.get(f"/notifications/{emp_id}?limit=2", headers={"Authorization": f"Bearer {token}"})
+        assert res_limit.status_code == 200
+        items = res_limit.json()
+        assert len(items) == 2
+
+        # Verify descending order (most recent first)
+        res_all = await ac.get(f"/notifications/{emp_id}?limit=50", headers={"Authorization": f"Bearer {token}"})
+        assert res_all.status_code == 200
+        all_items = res_all.json()
+        assert len(all_items) >= 3
+        # Compare created_at timestamps
+        t0 = datetime.fromisoformat(all_items[0]["created_at"])
+        t1 = datetime.fromisoformat(all_items[1]["created_at"])
+        assert t0 >= t1
+
+
+@pytest.fixture(scope="module")
+def rabbitmq_container():
+    from testcontainers.core.container import DockerContainer
+    with DockerContainer("rabbitmq:3-management-alpine").with_exposed_ports(5672) as rabbitmq:
+        yield rabbitmq
+
+
+@pytest_asyncio.fixture(scope="module")
+async def rabbitmq_url(rabbitmq_container):
+    import asyncio
+    import aio_pika
+    host = rabbitmq_container.get_container_host_ip()
+    port = rabbitmq_container.get_exposed_port(5672)
+    url = f"amqp://guest:guest@{host}:{port}/"
+
+    for _ in range(30):
+        try:
+            conn = await aio_pika.connect_robust(url, timeout=2)
+            await conn.close()
+            break
+        except Exception:
+            await asyncio.sleep(1)
+    return url
+
+
+@pytest.mark.asyncio
+async def test_n6_e2e_rabbitmq_notification_consumer(setup_db_and_app, rabbitmq_url):
+    import asyncio
+    import aio_pika
+    from ems_common.consumer import run_consumer
+    from services.notification.app.repositories.notification_repo import NotificationRepository
+
+    session_factory = setup_db_and_app
+    emp_id = uuid4()
+    event_id = uuid4()
+
+    stop_event = asyncio.Event()
+    consumer_task = asyncio.create_task(
+        run_consumer(
+            rabbitmq_url=rabbitmq_url,
+            exchange_name="ems.events",
+            queue_name="notification.e2e.test.queue",
+            dlx_name="notification.e2e.test.dlx",
+            dlq_name="notification.e2e.test.dlq",
+            routing_keys=["EmployeeOnboarded"],
+            session_factory=session_factory,
+            handler=handle_notification_event,
+            stop_event=stop_event,
+        )
+    )
+
+    await asyncio.sleep(0.5)
+
+    # Publish EmployeeOnboarded envelope to topic exchange
+    connection = await aio_pika.connect_robust(rabbitmq_url)
+    async with connection:
+        channel = await connection.channel()
+        exchange = await channel.declare_exchange("ems.events", aio_pika.ExchangeType.TOPIC, durable=True)
+
+        envelope = EventEnvelope(
+            event_id=event_id,
+            type=EventType.EMPLOYEE_ONBOARDED,
+            correlation_id=uuid4(),
+            payload={"employee_id": str(emp_id), "name": "E2E Notification User"},
+        )
+        msg_bytes = envelope.model_dump_json().encode("utf-8")
+        await exchange.publish(
+            aio_pika.Message(body=msg_bytes, headers={"X-Correlation-ID": str(uuid4())}),
+            routing_key="EmployeeOnboarded",
+        )
+
+    # Bounded wait loop (no fixed sleep)
+    found = False
+    start_time = asyncio.get_event_loop().time()
+    while asyncio.get_event_loop().time() - start_time < 10.0:
+        async with session_factory() as session:
+            repo = NotificationRepository(session)
+            notifs = await repo.list_by_employee(emp_id)
+            if len(notifs) >= 1:
+                assert notifs[0].event_id == event_id
+                assert "Welcome E2E Notification User" in notifs[0].message
+                found = True
+                break
+        await asyncio.sleep(0.2)
+
+    stop_event.set()
+    consumer_task.cancel()
+    try:
+        await consumer_task
+    except (Exception, asyncio.CancelledError):
+        pass
+
+    assert found is True

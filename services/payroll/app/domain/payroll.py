@@ -86,7 +86,7 @@ async def handle_leave_approved(session: AsyncSession, envelope: EventEnvelope |
     event_id = envelope.event_id
 
     # Check if event was already processed
-    stmt = select(ProcessedEvent).where(ProcessedEvent.event_id == event_id)
+    stmt = select(ProcessedEvent).where(ProcessedEvent.event_id == str(event_id))
     res = await session.execute(stmt)
     if res.scalar_one_or_none() is not None:
         return
@@ -104,6 +104,6 @@ async def handle_leave_approved(session: AsyncSession, envelope: EventEnvelope |
         session.add(deduction)
 
     # Mark as processed
-    processed_entry = ProcessedEvent(event_id=event_id)
+    processed_entry = ProcessedEvent(event_id=str(event_id))
     session.add(processed_entry)
     await session.commit()

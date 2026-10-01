@@ -106,3 +106,16 @@ def test_build_notification_missing_employee_id():
         build_notification(envelope)
     assert exc_info.value.status_code == 422
     assert exc_info.value.code == "VALIDATION_ERROR"
+
+
+def test_build_notification_unknown_type_raises():
+    envelope = EventEnvelope.model_construct(
+        event_id=uuid4(),
+        type="UNKNOWN_CUSTOM_EVENT",
+        correlation_id=uuid4(),
+        payload={"employee_id": str(uuid4())},
+    )
+    with pytest.raises(EMSError) as exc_info:
+        build_notification(envelope)
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "UNKNOWN_EVENT_TYPE"
