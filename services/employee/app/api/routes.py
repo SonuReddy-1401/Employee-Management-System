@@ -9,7 +9,7 @@ from services.employee.app.domain.employee import (
     extract_updatable_fields,
     validate_manager_not_self,
 )
-from services.employee.app.models.employee import Employee
+from services.employee.app.domain.saga import OnboardingSaga
 from services.employee.app.repositories.employee_repository import EmployeeRepository
 from services.employee.app.schemas.employee import (
     EmployeeCreateRequest,
@@ -53,15 +53,8 @@ async def create_employee(payload: EmployeeCreateRequest, db: AsyncSession = Dep
             status_code=status.HTTP_409_CONFLICT,
         )
 
-    employee = Employee(
-        name=payload.name,
-        email=payload.email,
-        department=payload.department,
-        designation=payload.designation,
-        manager_id=payload.manager_id,
-        status="PENDING_ONBOARDING",
-    )
-    created_employee = await repo.create(employee)
+    saga = OnboardingSaga(db)
+    created_employee = await saga.execute(payload)
     return created_employee
 
 
