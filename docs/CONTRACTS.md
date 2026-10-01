@@ -81,6 +81,15 @@
 | `POST` | `/payroll/run?month=YYYY-MM` | Process payroll for given month |
 | `GET` | `/payslips/{employee_id}` | Get payslips for an employee |
 
+#### Payload details
+- `POST /internal/profiles` body `{employee_id (uuid), monthly_salary (positive decimal)}` -> 201 `{employee_id, monthly_salary}`. Idempotent: if a profile for that employee_id already exists with the same salary, return 200 with the same body; if it exists with a different salary, return 409. 422 on invalid input.
+- `DELETE /internal/profiles/{employee_id}` -> 204 always, even if missing (safe to repeat).
+- `/internal/*` needs no JWT (gateway blocks it externally).
+- `POST /payroll/run?month=YYYY-MM` requires role HR or ADMIN. 422 if month is malformed. For every profile it creates one payslip for that month; if a payslip for `(employee_id, month)` already exists it is skipped, never duplicated. Response 200 `{month, created, skipped}`.
+- Payslip fields: `id`, `employee_id`, `month`, `gross_salary`, `unpaid_leave_days`, `deduction`, `net_salary`, `created_at`.
+- `GET /payslips/{employee_id}`: HR and ADMIN may read any employee; MANAGER and EMPLOYEE only their own (JWT sub must equal employee_id, otherwise 403). Returns a list ordered by month descending; empty list if none. 401 without a valid token.
+- Calculation: working days = Monday to Friday days in that month. unpaid_leave_days = number of Monday-Friday days of UNPAID leave that fall inside the month (a leave spanning two months counts only the days inside each month). deduction = gross_salary / working_days_in_month * unpaid_leave_days. net_salary = gross_salary - deduction. All money uses Decimal, rounded to 2 decimals with ROUND_HALF_UP. Never use float for money.
+
 ### Notification Service (`:8005`)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -134,6 +143,10 @@ Orchestrated inside the **Employee** service on `POST /employees`:
   - `LeaveRejected`
 - **Outbox Pattern**: Producers write event row in the same DB transaction; a background publisher sends it.
 - **Idempotency**: Consumers are idempotent via a `processed_events` table keyed by `event_id`.
+
+#### Event payloads
+- `EmployeeOnboarded` payload `{employee_id, name, email}`
+- `LeaveRequested`, `LeaveApproved`, `LeaveRejected` payload `{leave_id, employee_id, start_date (ISO date), end_date (ISO date), leave_type (PAID|UNPAID), days}`, where `days` = number of Monday-Friday days from `start_date` to `end_date` inclusive.
 
 ---
 
