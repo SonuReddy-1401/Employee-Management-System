@@ -45,6 +45,7 @@ async def create_profile(payload: ProfileCreateRequest, db: AsyncSession = Depen
         monthly_salary=payload.monthly_salary,
     )
     created_profile = await repo.create_profile(profile)
+    await db.commit()
     return Response(
         content=ProfileResponse.model_validate(created_profile).model_dump_json(),
         status_code=status.HTTP_201_CREATED,
@@ -56,6 +57,7 @@ async def create_profile(payload: ProfileCreateRequest, db: AsyncSession = Depen
 async def delete_profile(employee_id: UUID, db: AsyncSession = Depends(get_db)):
     repo = PayrollRepository(db)
     await repo.delete_profile(employee_id)
+    await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -104,6 +106,7 @@ async def run_payroll(
         await repo.create_payslip(payslip)
         created_count += 1
 
+    await db.commit()
     return PayrollRunResponse(month=month, created=created_count, skipped=skipped_count)
 
 
