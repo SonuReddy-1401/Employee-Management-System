@@ -34,3 +34,5 @@ tests/load/results/
 *.swo
 .DS_Store
 Thumbs.db
+
+*.egg-info/
