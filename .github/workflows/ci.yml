@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Ruff check
+        run: python -m ruff check .
+
+  tests:
+    name: Unit Tests (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - libs/common
+          - services/auth
+          - services/employee
+          - services/leave
+          - services/payroll
+          - services/notification
+          - services/gateway
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e "libs/common[dev]"
+          if [ -f "${{ matrix.target }}/requirements.txt" ]; then
+            pip install -r ${{ matrix.target }}/requirements.txt
+          fi
+
+      - name: Run pytest
+        run: python -m pytest ${{ matrix.target }} -v
+
+  coverage:
+    name: Coverage Audit
+    runs-on: ubuntu-latest
+    needs: [tests]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install all dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e "libs/common[dev]"
+          for req in services/*/requirements.txt; do
+            if [ -f "$req" ]; then
+              pip install -r "$req"
+            fi
+          done
+
+      - name: Run coverage script
+        run: python scripts/coverage.py
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            docs/COVERAGE.md
+            coverage_reports/
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [lint, tests]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup environment file
+        run: cp .env.example .env
+
+      - name: Build Docker Compose services
+        run: docker compose build
+
+  live-stack:
+    name: Live Stack Integration & Chaos Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Setup environment file
+        run: cp .env.example .env
+
+      - name: Start Docker Compose stack
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --wait
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e "libs/common[dev]"
+          for req in services/*/requirements.txt; do
+            if [ -f "$req" ]; then
+              pip install -r "$req"
+            fi
+          done
+
+      - name: Run smoke tests
+        run: python scripts/smoke.py
+
+      - name: Run contract tests
+        run: python -m pytest tests/contract -v
+
+      - name: Run E2E tests
+        run: python -m pytest tests/e2e -v
+
+      - name: Run chaos tests
+        run: python -m pytest tests/chaos -v -m chaos -s
+
+      - name: Capture stack status
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml ps
+
+      - name: Capture container logs
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --no-color > docker-compose-logs.log
+
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-compose-logs
+          path: docker-compose-logs.log
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v

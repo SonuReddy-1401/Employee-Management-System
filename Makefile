@@ -1,4 +1,4 @@
-.PHONY: up up-dev down logs test coverage e2e contract-test chaos load
+.PHONY: up up-dev down logs test coverage e2e contract-test chaos load lint
 
 up:
 	docker compose up -d --wait
@@ -29,6 +29,10 @@ chaos:
 
 load:
 	python scripts/load.py
+
+lint:
+	python -m ruff check .
+
 
 
 
