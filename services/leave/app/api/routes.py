@@ -36,10 +36,10 @@ async def get_db(request: Request):
     async with request.app.state.session_factory() as session:
         try:
             yield session
-            await session.commit()
         except Exception:
             await session.rollback()
             raise
+
 
 
 @router.post("/leaves", response_model=LeaveResponse, status_code=status.HTTP_201_CREATED)
@@ -119,8 +119,9 @@ async def create_leave(
         payload=event_payload,
         correlation_id=get_correlation_id(),
     )
-
+    await session.commit()
     return leave
+
 
 
 @router.post("/leaves/{id}/approve", response_model=LeaveResponse)
@@ -180,7 +181,7 @@ async def approve_leave(
         payload=event_payload,
         correlation_id=get_correlation_id(),
     )
-
+    await session.commit()
     return leave
 
 
@@ -231,7 +232,7 @@ async def reject_leave(
         payload=event_payload,
         correlation_id=get_correlation_id(),
     )
-
+    await session.commit()
     return leave
 
 
@@ -275,7 +276,9 @@ async def cancel_leave(
             correlation_id=get_correlation_id(),
         )
 
+    await session.commit()
     return leave
+
 
 
 @router.get("/leaves", response_model=LeaveListResponse)
