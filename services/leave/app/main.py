@@ -16,14 +16,19 @@ from services.leave.app.models.leave import Base
 logger = logging.getLogger(__name__)
 
 
-async def outbox_publisher_loop(session_factory, rabbitmq_url: str):
+async def outbox_publisher_loop(session_factory, poll_interval: float = 5.0):
     while True:
         try:
             async with session_factory() as session:
-                await publish_outbox_messages(session, rabbitmq_url=rabbitmq_url)
+                await publish_outbox_messages(session)
+        except asyncio.CancelledError:
+            break
         except Exception as exc:
             logger.warning(f"Outbox publisher iteration error: {exc}")
-        await asyncio.sleep(5)
+
+
+        await asyncio.sleep(poll_interval)
+
 
 
 @asynccontextmanager
@@ -46,8 +51,9 @@ async def lifespan(app: FastAPI):
     publisher_task = None
     if settings.OUTBOX_PUBLISHER_ENABLED:
         publisher_task = asyncio.create_task(
-            outbox_publisher_loop(session_factory, settings.RABBITMQ_URL)
+            outbox_publisher_loop(session_factory)
         )
+
 
     yield
 

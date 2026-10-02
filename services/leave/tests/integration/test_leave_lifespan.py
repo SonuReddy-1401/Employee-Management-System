@@ -23,9 +23,10 @@ async def test_leave_lifespan_publisher_enabled(monkeypatch):
 
     stub_called = False
 
-    async def stub_outbox_publisher_loop(session_factory, rabbitmq_url):
+    async def stub_outbox_publisher_loop(*args, **kwargs):
         nonlocal stub_called
         stub_called = True
+
         try:
             await asyncio.sleep(100)
         except asyncio.CancelledError:
