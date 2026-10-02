@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Leave",
+  "type": "object",
+  "required": [
+    "id",
+    "employee_id",
+    "manager_id",
+    "start_date",
+    "end_date",
+    "leave_type",
+    "reason",
+    "days",
+    "status",
+    "decided_by",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "employee_id": { "type": "string", "format": "uuid" },
+    "manager_id": { "type": ["string", "null"], "format": "uuid" },
+    "start_date": { "type": "string" },
+    "end_date": { "type": "string" },
+    "leave_type": { "type": "string", "enum": ["PAID", "UNPAID"] },
+    "reason": { "type": ["string", "null"] },
+    "days": { "type": "integer" },
+    "status": {
+      "type": "string",
+      "enum": ["PENDING", "APPROVED", "REJECTED", "CANCELLED"]
+    },
+    "decided_by": { "type": ["string", "null"], "format": "uuid" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

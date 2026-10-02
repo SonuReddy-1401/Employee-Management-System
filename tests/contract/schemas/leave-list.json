@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LeaveList",
+  "type": "object",
+  "required": ["items", "total", "page", "page_size"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": { "$ref": "leave.json" }
+    },
+    "total": { "type": "integer" },
+    "page": { "type": "integer" },
+    "page_size": { "type": "integer" }
+  },
+  "additionalProperties": true
+}

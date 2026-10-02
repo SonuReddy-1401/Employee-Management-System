@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LeaveBalance",
+  "type": "object",
+  "required": [
+    "employee_id",
+    "year",
+    "allowance",
+    "used",
+    "remaining"
+  ],
+  "properties": {
+    "employee_id": { "type": "string", "format": "uuid" },
+    "year": { "type": "integer" },
+    "allowance": { "type": "integer" },
+    "used": { "type": "integer" },
+    "remaining": { "type": "integer" }
+  },
+  "additionalProperties": true
+}

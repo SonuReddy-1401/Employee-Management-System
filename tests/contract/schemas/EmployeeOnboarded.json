@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EmployeeOnboardedPayload",
+  "type": "object",
+  "required": ["employee_id", "name", "email"],
+  "properties": {
+    "employee_id": { "type": "string", "format": "uuid" },
+    "name": { "type": "string" },
+    "email": { "type": "string" }
+  },
+  "additionalProperties": true
+}

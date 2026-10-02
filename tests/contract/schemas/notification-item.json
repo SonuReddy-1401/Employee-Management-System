@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NotificationItem",
+  "type": "object",
+  "required": [
+    "id",
+    "employee_id",
+    "event_id",
+    "event_type",
+    "message",
+    "created_at"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "employee_id": { "type": "string", "format": "uuid" },
+    "event_id": { "type": "string", "format": "uuid" },
+    "event_type": { "type": "string" },
+    "message": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

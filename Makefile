@@ -1,4 +1,4 @@
-.PHONY: up up-dev down logs test coverage e2e
+.PHONY: up up-dev down logs test coverage e2e contract-test
 
 up:
 	docker compose up -d --wait
@@ -20,3 +20,7 @@ coverage:
 
 e2e:
 	pytest tests/e2e -v
+
+contract-test:
+	pytest tests/contract -v
+

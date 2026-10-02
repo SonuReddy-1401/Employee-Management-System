@@ -20,3 +20,9 @@ services:
   notification:
     ports:
       - "8005:8005"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+
+

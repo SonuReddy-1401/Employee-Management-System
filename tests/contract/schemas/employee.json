@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Employee",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "email",
+    "department",
+    "designation",
+    "manager_id",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "name": { "type": "string" },
+    "email": { "type": "string", "format": "email" },
+    "department": { "type": "string" },
+    "designation": { "type": "string" },
+    "manager_id": { "type": ["string", "null"], "format": "uuid" },
+    "status": {
+      "type": "string",
+      "enum": ["PENDING_ONBOARDING", "ACTIVE", "ONBOARDING_FAILED"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

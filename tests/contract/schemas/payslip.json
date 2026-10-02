@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Payslip",
+  "type": "object",
+  "required": [
+    "id",
+    "employee_id",
+    "month",
+    "gross_salary",
+    "unpaid_leave_days",
+    "deduction",
+    "net_salary",
+    "created_at"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "employee_id": { "type": "string", "format": "uuid" },
+    "month": { "type": "string" },
+    "gross_salary": { "type": ["number", "integer", "string"], "pattern": "^[0-9]+(\\.[0-9]+)?$" },
+    "unpaid_leave_days": { "type": "integer" },
+    "deduction": { "type": ["number", "integer", "string"], "pattern": "^[0-9]+(\\.[0-9]+)?$" },
+    "net_salary": { "type": ["number", "integer", "string"], "pattern": "^[0-9]+(\\.[0-9]+)?$" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

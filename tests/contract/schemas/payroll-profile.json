@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PayrollProfile",
+  "type": "object",
+  "required": ["employee_id", "monthly_salary"],
+  "properties": {
+    "employee_id": { "type": "string", "format": "uuid" },
+    "monthly_salary": { "type": ["number", "integer", "string"] }
+
+  },
+  "additionalProperties": true
+}
