@@ -4,6 +4,9 @@ from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
+from ems_common.outbox import OutboxBase, OutboxMessage
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -29,14 +32,5 @@ class Employee(Base):
     )
 
 
-class OutboxMessage(Base):
-    __tablename__ = "outbox"
+__all__ = ["Base", "Employee", "OutboxBase", "OutboxMessage"]
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    payload: Mapped[str] = mapped_column(Text, nullable=False)
-    correlation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

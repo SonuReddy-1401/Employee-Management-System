@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from ems_common.correlation import CorrelationIdMiddleware
 from ems_common.errors import register_error_handlers
 from ems_common.observability import setup_observability
-from ems_common.outbox import publish_outbox_messages
+from ems_common.outbox import OutboxBase, publish_outbox_messages
 from services.employee.app.api.routes import get_db, router
 from services.employee.app.config import settings
 from services.employee.app.models.employee import Base
@@ -26,22 +26,27 @@ async def get_db_override():
             raise
 
 
-async def outbox_publisher_loop():
+async def outbox_publisher_loop(session_factory=None, poll_interval: float | None = None):
+    factory = session_factory or async_session_factory
+    interval = poll_interval if poll_interval is not None else settings.OUTBOX_POLL_INTERVAL_SECONDS
     while True:
         try:
-            async with async_session_factory() as session:
+            async with factory() as session:
                 await publish_outbox_messages(session)
         except asyncio.CancelledError:
             break
         except Exception as exc:
             logger.warning(f"Outbox publisher encountered error: {exc}")
-        await asyncio.sleep(settings.OUTBOX_POLL_INTERVAL_SECONDS)
+        await asyncio.sleep(interval)
+
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(OutboxBase.metadata.create_all)
+
 
     publisher_task = None
     if settings.OUTBOX_PUBLISHER_ENABLED:

@@ -22,11 +22,13 @@ os.environ["TESTCONTAINERS_RYUK_DISABLED"] = "true"
 import jwt
 from ems_common.errors import EMSError
 from ems_common.http_client import ResilientHTTPClient, create_circuit_breaker
+from ems_common.outbox import OutboxBase, OutboxMessage
+
 from services.employee.app.api.routes import get_db
 from services.employee.app.config import settings
 from services.employee.app.domain.saga import OnboardingSaga
 from services.employee.app.main import app
-from services.employee.app.models.employee import Base, Employee, OutboxMessage
+from services.employee.app.models.employee import Base, Employee
 from services.employee.app.schemas.employee import EmployeeCreateRequest
 
 # Disable background outbox publisher in test suite
@@ -53,6 +55,10 @@ async def setup_db_and_app(postgres_container):
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(OutboxBase.metadata.create_all)
+
+
+
 
     async def get_test_db():
         async with async_session_factory() as session:
