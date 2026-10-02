@@ -1,0 +1,7 @@
+name: ems-stack
+
+services:
+  gateway:
+    environment:
+      RATE_LIMIT_REQUESTS: "1000000"
+      LOGIN_RATE_LIMIT_REQUESTS: "1000000"

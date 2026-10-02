@@ -22,8 +22,10 @@ env/
 coverage.xml
 htmlcov/
 coverage_reports/
+tests/load/results/
 .nox/
 .tox/
+
 
 # IDEs & OS
 .vscode/

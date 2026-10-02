@@ -1,4 +1,4 @@
-.PHONY: up up-dev down logs test coverage e2e contract-test chaos
+.PHONY: up up-dev down logs test coverage e2e contract-test chaos load
 
 up:
 	docker compose up -d --wait
@@ -26,5 +26,9 @@ contract-test:
 
 chaos:
 	python -m pytest tests/chaos -v -m chaos -s
+
+load:
+	python scripts/load.py
+
 
 
