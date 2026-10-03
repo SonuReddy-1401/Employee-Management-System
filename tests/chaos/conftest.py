@@ -26,8 +26,27 @@ PROMETHEUS_URL = os.getenv("CHAOS_PROMETHEUS_URL", "http://localhost:9090")
 RABBITMQ_HOST = os.getenv("CHAOS_RABBITMQ_HOST", os.getenv("CONTRACT_RABBITMQ_HOST", "localhost"))
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-RABBITMQ_USER = os.getenv("RABBITMQ_MGMT_USER", "guest")
-RABBITMQ_PASS = os.getenv("RABBITMQ_MGMT_PASSWORD", "guest")
+RABBITMQ_MGMT_USER = os.getenv("RABBITMQ_MGMT_USER")
+RABBITMQ_MGMT_PASSWORD = os.getenv("RABBITMQ_MGMT_PASSWORD")
+RABBITMQ_USER = RABBITMQ_MGMT_USER
+RABBITMQ_PASS = RABBITMQ_MGMT_PASSWORD
+RABBITMQ_MGMT_URL = os.getenv("RABBITMQ_MGMT_URL", f"http://{RABBITMQ_HOST}:15672")
+
+missing = []
+if not ADMIN_EMAIL:
+    missing.append("ADMIN_EMAIL")
+if not ADMIN_PASSWORD:
+    missing.append("ADMIN_PASSWORD")
+if not RABBITMQ_MGMT_USER:
+    missing.append("RABBITMQ_MGMT_USER")
+if not RABBITMQ_MGMT_PASSWORD:
+    missing.append("RABBITMQ_MGMT_PASSWORD")
+
+if missing:
+    raise RuntimeError(
+        f"Missing required environment variables for chaos tests: {', '.join(missing)}. "
+        f"Ensure .env file exists and contains these credentials."
+    )
 
 ALL_SERVICES = [
     "gateway",

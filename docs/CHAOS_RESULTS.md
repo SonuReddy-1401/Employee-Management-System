@@ -32,3 +32,8 @@ This document records the empirical results and observations from running the EM
 
 4. **Observability Verification (S6)**:
    - Prometheus accurately scraped and recorded the 5xx responses emitted during S1/S2 onboarding failures under job `employee`, validating system telemetry end-to-end.
+
+5. **S3 Test Race & Queue Drain**:
+   - Fact: Scenario 3 (S3) previously had a test race condition where payroll was executed immediately after notification arrival, and it now waits for the `ems.payroll.queue` payroll queue to drain before running payroll.
+   - Fact: A payslip already created for a month is not recalculated when a late leave event arrives (known limitation).
+   - Hypothesis: A slow CI runner widened the race window between notification arrival and payroll event consumption.

@@ -4,7 +4,16 @@ import time
 import uuid
 import httpx
 import pytest
-from tests.chaos.conftest import LEAVE_URL, NOTIFICATION_URL, PAYROLL_URL, login_user_directly, REPO_ROOT
+from tests.chaos.conftest import (
+    LEAVE_URL,
+    NOTIFICATION_URL,
+    PAYROLL_URL,
+    RABBITMQ_MGMT_URL,
+    RABBITMQ_MGMT_USER,
+    RABBITMQ_MGMT_PASSWORD,
+    login_user_directly,
+    REPO_ROOT,
+)
 
 
 @pytest.mark.chaos
@@ -97,10 +106,53 @@ async def test_rabbitmq_down_during_leave_approval(docker_compose, new_employee,
 
         print(f"\n[S3 Recovery Metric] RabbitMQ healthy to LeaveApproved notification: {measured_time:.2f} seconds")
 
+        # 7. Wait for payroll queue to drain before running payroll
+        t_drain_start = time.time()
+        drain_timeout = 60.0
+        queue_drained = False
+        last_ready = None
+        last_unack = None
+        last_consumers = None
+        drain_time = None
+
+        queue_name = "ems.payroll.queue"
+        mgmt_url = f"{RABBITMQ_MGMT_URL.rstrip('/')}/api/queues/%2F/{queue_name}"
+        auth = (RABBITMQ_MGMT_USER, RABBITMQ_MGMT_PASSWORD)
+
+        while time.time() - t_drain_start < drain_timeout:
+            await asyncio.sleep(1.0)
+            try:
+                with httpx.Client(timeout=5.0) as mgmt_client:
+                    r = mgmt_client.get(mgmt_url, auth=auth)
+                    if r.status_code == 200:
+                        q_data = r.json()
+                        last_ready = q_data.get("messages_ready", 0)
+                        last_unack = q_data.get("messages_unacknowledged", 0)
+                        last_consumers = q_data.get("consumers", 0)
+                        if last_ready == 0 and last_unack == 0:
+                            queue_drained = True
+                            drain_time = time.time() - t_drain_start
+                            break
+            except Exception:
+                pass
+
+        if not queue_drained:
+            logs_res = subprocess.run(
+                ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.dev.yml", "logs", "--tail", "50", "payroll"],
+                cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            pytest.fail(
+                f"Payroll queue '{queue_name}' was not drained within {drain_timeout}s. "
+                f"ready={last_ready}, unacknowledged={last_unack}, consumer count={last_consumers}.\n\nPayroll Logs:\n{logs_res.stdout}\n{logs_res.stderr}"
+            )
+
+        print(f"\n[S3 Recovery Metric] Payroll queue drained: {drain_time:.2f} seconds")
+
         # Check payroll calculation
         with httpx.Client(timeout=30.0) as client:
             resp_run = client.post(f"{PAYROLL_URL}/payroll/run?month={month_str}", headers=admin_headers)
             assert resp_run.status_code == 200
+            assert resp_run.json().get("created", 0) >= 1, f"Expected created >= 1, got {resp_run.json()}"
 
             resp_slips = client.get(f"{PAYROLL_URL}/payslips/{emp['id']}", headers=admin_headers)
             assert resp_slips.status_code == 200
