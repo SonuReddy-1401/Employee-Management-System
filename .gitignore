@@ -36,3 +36,8 @@ tests/load/results/
 Thumbs.db
 
 *.egg-info/
+
+# Frontend
+node_modules/
+dist/
+
