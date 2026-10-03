@@ -52,6 +52,19 @@
   - Local integration runs always had the RabbitMQ broker container fully initialized before consumer tasks started.
   - *(Hypothesis)* CI stack startup ordering caused the broker container to take longer to open port 5672 than consumer service initialization.
 
+## BUG-004: UI displayed blank leave balance (response field names did not match)
+
+- **Title**: UI displayed blank leave balance (response field names did not match)
+- **Severity**: Medium
+- **Found by**: Manual testing of the running UI; the employee dashboard and the Leave page showed blank allowance, used and remaining.
+- **Evidence**: The real response keys of `GET /leaves/balance/{id}` are `employee_id`, `year`, `allowance`, `used`, `remaining`; the UI read `allowance_days`, `used_days` and `remaining_days`.
+- **Root Cause**: The UI code and its tests used field names that were not taken from the real API response.
+- **Fix**: Accessors changed to `allowance`, `used` and `remaining` in `Dashboard.jsx` and `Leave.jsx`, error text shown instead of blank numbers.
+- **Regression Tests**: The updated tests in `frontend/src/test/leavePage.test.jsx` and the dashboard tests whose mocks use the real response shape.
+- **Why Earlier Test Levels Missed It**: The frontend unit tests mocked the API with invented field names, so they agreed with the bug; the contract tests cover the backend only.
+- **Lesson**: Mocks must be copied from real responses.
+
+
 
 
 
