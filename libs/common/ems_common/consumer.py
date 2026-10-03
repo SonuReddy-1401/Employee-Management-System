@@ -89,93 +89,166 @@ async def run_consumer(
     handler: Callable[[AsyncSession, EventEnvelope], Any],
     max_attempts: Optional[int] = None,
     stop_event: Optional[asyncio.Event] = None,
+    initial_reconnect_delay: Optional[float] = None,
+    max_reconnect_delay: Optional[float] = None,
+    connect_timeout: Optional[float] = None,
+    stop_poll_seconds: Optional[float] = None,
 ):
     attempts_limit = max_attempts if max_attempts is not None else settings.CONSUMER_MAX_ATTEMPTS
+    init_delay = (
+        initial_reconnect_delay
+        if initial_reconnect_delay is not None
+        else settings.CONSUMER_RECONNECT_INITIAL_DELAY_SECONDS
+    )
+    max_delay = (
+        max_reconnect_delay
+        if max_reconnect_delay is not None
+        else settings.CONSUMER_RECONNECT_MAX_DELAY_SECONDS
+    )
+    conn_timeout = (
+        connect_timeout
+        if connect_timeout is not None
+        else settings.CONSUMER_CONNECT_TIMEOUT_SECONDS
+    )
+    stop_poll = (
+        stop_poll_seconds
+        if stop_poll_seconds is not None
+        else getattr(settings, "CONSUMER_STOP_POLL_SECONDS", 1.0)
+    )
 
-    connection = await aio_pika.connect_robust(rabbitmq_url)
-    async with connection:
-        channel = await connection.channel()
-        await channel.set_qos(prefetch_count=10)
+    connection_attempts = 0
 
-        # Declare topic exchange
-        exchange = await channel.declare_exchange(
-            exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
-        )
+    while True:
+        if stop_event and stop_event.is_set():
+            break
 
-        # Declare dead letter exchange & queue
-        dlx = await channel.declare_exchange(
-            dlx_name, aio_pika.ExchangeType.DIRECT, durable=True
-        )
-        dlq = await channel.declare_queue(dlq_name, durable=True)
-        await dlq.bind(dlx, routing_key=dlq_name)
+        try:
+            connection = await asyncio.wait_for(
+                aio_pika.connect_robust(rabbitmq_url), timeout=conn_timeout
+            )
+            async with connection:
+                channel = await connection.channel()
+                await channel.set_qos(prefetch_count=10)
 
-        # Declare main durable queue with DLX settings
-        main_queue = await channel.declare_queue(
-            queue_name,
-            durable=True,
-            arguments={
-                "x-dead-letter-exchange": dlx_name,
-                "x-dead-letter-routing-key": dlq_name,
-            },
-        )
+                # Declare topic exchange
+                exchange = await channel.declare_exchange(
+                    exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+                )
 
-        for rkey in routing_keys:
-            await main_queue.bind(exchange, routing_key=rkey)
+                # Declare dead letter exchange & queue
+                dlx = await channel.declare_exchange(
+                    dlx_name, aio_pika.ExchangeType.DIRECT, durable=True
+                )
+                dlq = await channel.declare_queue(dlq_name, durable=True)
+                await dlq.bind(dlx, routing_key=dlq_name)
 
-        async with main_queue.iterator() as queue_iter:
-            async for message in queue_iter:
+                # Declare main durable queue with DLX settings
+                main_queue = await channel.declare_queue(
+                    queue_name,
+                    durable=True,
+                    arguments={
+                        "x-dead-letter-exchange": dlx_name,
+                        "x-dead-letter-routing-key": dlq_name,
+                    },
+                )
+
+                for rkey in routing_keys:
+                    await main_queue.bind(exchange, routing_key=rkey)
+
+                connection_attempts = 0
+                logger.info("Consumer connected")
+
+                async with main_queue.iterator() as queue_iter:
+                    while True:
+                        if stop_event and stop_event.is_set():
+                            break
+
+                        try:
+                            message = await asyncio.wait_for(
+                                anext(queue_iter), timeout=stop_poll
+                            )
+                        except asyncio.TimeoutError:
+                            if stop_event and stop_event.is_set():
+                                break
+                            continue
+                        except StopAsyncIteration:
+                            break
+
+
+                        # Check if body is valid EventEnvelope
+                        try:
+                            raw_data = json.loads(message.body.decode("utf-8"))
+                            envelope = EventEnvelope.model_validate(raw_data)
+                        except (json.JSONDecodeError, ValidationError, Exception) as parse_err:
+                            logger.error(f"Malformed message received: {parse_err}. Rejecting to DLQ.")
+                            await message.reject(requeue=False)
+                            continue
+
+                        event_id_str = str(envelope.event_id)
+                        current_attempt = message.headers.get("x-delivery-attempt", 1) if message.headers else 1
+
+                        session = session_factory()
+                        try:
+                            if await async_is_event_processed(session, event_id_str):
+                                logger.info(f"Duplicate event '{event_id_str}' received. Skipping.")
+                                await message.ack()
+                                continue
+
+                            try:
+                                res = handler(session, envelope)
+                                if asyncio.iscoroutine(res):
+                                    await res
+
+                                await async_mark_event_processed(session, event_id_str)
+                                await session.commit()
+                                await message.ack()
+                            except Exception as handler_err:
+                                try:
+                                    await session.rollback()
+                                except Exception:
+                                    pass
+                                logger.warning(
+                                    f"Attempt {current_attempt}/{attempts_limit} failed for event '{event_id_str}': {handler_err}"
+                                )
+                                if current_attempt < attempts_limit:
+                                    new_headers = dict(message.headers or {})
+                                    new_headers["x-delivery-attempt"] = current_attempt + 1
+                                    retry_msg = aio_pika.Message(
+                                        body=message.body,
+                                        headers=new_headers,
+                                        correlation_id=message.correlation_id,
+                                    )
+                                    await exchange.publish(retry_msg, routing_key=message.routing_key or envelope.type.value)
+                                    await message.ack()
+                                else:
+                                    logger.error(
+                                        f"Max attempts ({attempts_limit}) reached for event '{event_id_str}'. Sending to DLQ."
+                                    )
+                                    await message.reject(requeue=False)
+                        finally:
+                            res = session.close()
+                            if asyncio.iscoroutine(res):
+                                await res
+
                 if stop_event and stop_event.is_set():
                     break
-
-                # Check if body is valid EventEnvelope
+        except asyncio.CancelledError:
+            raise
+        except (Exception, asyncio.TimeoutError) as err:
+            if stop_event and stop_event.is_set():
+                break
+            connection_attempts += 1
+            delay = min(init_delay * (2 ** (connection_attempts - 1)), max_delay)
+            logger.warning(
+                f"Consumer failed (attempt {connection_attempts}): {err}. Retrying in {delay:.1f}s..."
+            )
+            if stop_event:
                 try:
-                    raw_data = json.loads(message.body.decode("utf-8"))
-                    envelope = EventEnvelope.model_validate(raw_data)
-                except (json.JSONDecodeError, ValidationError, Exception) as parse_err:
-                    logger.error(f"Malformed message received: {parse_err}. Rejecting to DLQ.")
-                    await message.reject(requeue=False)
-                    continue
+                    await asyncio.wait_for(stop_event.wait(), timeout=delay)
+                    break
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(delay)
+            continue
 
-                event_id_str = str(envelope.event_id)
-                current_attempt = message.headers.get("x-delivery-attempt", 1) if message.headers else 1
-
-                session = session_factory()
-                try:
-                    if await async_is_event_processed(session, event_id_str):
-                        logger.info(f"Duplicate event '{event_id_str}' received. Skipping.")
-                        await message.ack()
-                        continue
-
-                    try:
-                        res = handler(session, envelope)
-                        if asyncio.iscoroutine(res):
-                            await res
-
-                        await async_mark_event_processed(session, event_id_str)
-                        await session.commit()
-                        await message.ack()
-                    except Exception as handler_err:
-                        try:
-                            await session.rollback()
-                        except Exception:
-                            pass
-                        logger.warning(
-                            f"Attempt {current_attempt}/{attempts_limit} failed for event '{event_id_str}': {handler_err}"
-                        )
-                        if current_attempt < attempts_limit:
-                            new_headers = dict(message.headers or {})
-                            new_headers["x-delivery-attempt"] = current_attempt + 1
-                            retry_msg = aio_pika.Message(
-                                body=message.body,
-                                headers=new_headers,
-                                correlation_id=message.correlation_id,
-                            )
-                            await exchange.publish(retry_msg, routing_key=message.routing_key or envelope.type.value)
-                            await message.ack()
-                        else:
-                            logger.error(
-                                f"Max attempts ({attempts_limit}) reached for event '{event_id_str}'. Sending to DLQ."
-                            )
-                            await message.reject(requeue=False)
-                finally:
-                    await session.close()

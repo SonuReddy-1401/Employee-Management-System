@@ -32,6 +32,26 @@
   - **Payroll**: Three explicit `await db.commit()` calls were added in `create_profile`, `delete_profile`, and `run_payroll`; `payroll_repository` already commits inside its methods, and scenario (e) failed 0/30 on the old code, so these are defensive and redundant, not a fix for an observed failure.
   - **Auth**: `get_db` dependency did not change, and no route handler gained or lost a commit call.
   - **Notification**: `get_db` dependency did not change, and no route handler gained or lost a commit call.
-- **Why Earlier Test Levels Missed It**: In-process ASGI tests (such as pytest with `AsyncClient(transport=ASGITransport)`) execute dependency cleanup before returning control to the caller context, masking post-yield commit race conditions. The race condition only manifests over real HTTP sockets on a running container stack.
+
+## BUG-003: Consumers give up permanently when the broker is unreachable at startup
+
+- **Title**: Consumers give up permanently when the broker is unreachable at startup
+- **Severity**: High
+- **Found by**: GitHub Actions live-stack run, contract test `test_notification_contract_lifecycle`
+- **Log Line**: `error when creating transport: <AMQPConnectionError: (111, "Connect call failed ('172.18.0.4', 5672)")>`
+- **Root Cause**: The consumer made a single connection attempt without retries. Specifically, `git show HEAD:libs/common/ems_common/consumer.py` executed:
+  `connection = await aio_pika.connect_robust(rabbitmq_url)`
+  When the broker was unavailable at startup, `run_consumer` raised an unhandled exception or terminated the background `asyncio.create_task`, causing microservice consumers (`notification`, `payroll`) to remain alive via `/health` but never consume events.
+- **Fix**: Replaced single connection logic in `run_consumer` with an infinite retry loop with exponential backoff (`CONSUMER_RECONNECT_INITIAL_DELAY_SECONDS`, `CONSUMER_RECONNECT_MAX_DELAY_SECONDS`, `CONSUMER_CONNECT_TIMEOUT_SECONDS`), applied the backoff to post-connect failures, and implemented idle polling via `CONSUMER_STOP_POLL_SECONDS` for fast shutdown responsiveness.
+- **Regression Tests**:
+  - `T1 test_retries_while_broker_unreachable`: Verifies retries grow with exponential backoff when broker is unreachable (no containers).
+  - `T2 test_stop_event_ends_idle_consumer`: Verifies idle connected consumer exits within 3 seconds upon `stop_event`.
+  - `T3 test_message_received_once_after_connect`: Verifies event consumption and idempotency processing.
+- **Why Earlier Test Levels Missed It**:
+  - Chaos tests stopped RabbitMQ only after service connections were already established.
+  - Local integration runs always had the RabbitMQ broker container fully initialized before consumer tasks started.
+  - *(Hypothesis)* CI stack startup ordering caused the broker container to take longer to open port 5672 than consumer service initialization.
+
+
 
 

@@ -23,6 +23,12 @@ class CommonSettings(BaseSettings):
     CONSUMER_QUEUE_NAME: str = "ems.queue"
     CONSUMER_DLQ_NAME: str = "ems.dlq"
     CONSUMER_MAX_ATTEMPTS: int = 3
+    CONSUMER_RECONNECT_INITIAL_DELAY_SECONDS: float = 1.0
+    CONSUMER_RECONNECT_MAX_DELAY_SECONDS: float = 30.0
+    CONSUMER_CONNECT_TIMEOUT_SECONDS: float = 5.0
+    CONSUMER_STOP_POLL_SECONDS: float = 1.0
+
+
 
 
 settings = CommonSettings()
