@@ -5,10 +5,10 @@ import { canSee } from './lib/permissions.js';
 import { Sidebar } from './components/Sidebar.jsx';
 import { TopBar } from './components/TopBar.jsx';
 import { Login } from './pages/Login.jsx';
+import { Employees } from './pages/Employees.jsx';
+import { Leave } from './pages/Leave.jsx';
 import {
   Dashboard,
-  Employees,
-  Leave,
   Payroll,
   Notifications,
   System,
