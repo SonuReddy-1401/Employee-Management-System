@@ -48,7 +48,7 @@ describe('Leave Page Component', () => {
         return Promise.resolve({ items: mockEmployees, total: 2 });
       }
       if (url.includes('/leaves/balance/')) {
-        return Promise.resolve({ allowance_days: 20, used_days: 5, remaining_days: 15 });
+        return Promise.resolve({ employee_id: 'emp-1', year: 2026, allowance: 20, used: 5, remaining: 15 });
       }
       if (url.includes('/leaves')) {
         return Promise.resolve({ items: mockLeaves, total: 1 });
@@ -70,6 +70,65 @@ describe('Leave Page Component', () => {
 
     expect(screen.getByTestId('balance-employee-select')).toHaveValue('');
     expect(screen.getByText(/please select an employee to view leave balance/i)).toBeInTheDocument();
+  });
+
+  it('renders EMPLOYEE leave balance (allowance, used, remaining) with URL containing user id and year', async () => {
+    const currentYear = new Date().getUTCFullYear();
+    render(
+      <BrowserRouter>
+        <Leave user={{ id: 'emp-1', role: ROLES.EMPLOYEE }} />
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/allowance:/i)).toHaveTextContent('Allowance: 20 days');
+      expect(screen.getByText(/used:/i)).toHaveTextContent('Used: 5 days');
+      expect(screen.getByText(/remaining:/i)).toHaveTextContent('Remaining: 15 days');
+    });
+
+    expect(apiModule.api.get).toHaveBeenCalledWith(`/leaves/balance/emp-1?year=${currentYear}`);
+  });
+
+  it('renders MANAGER leave balance (allowance, used, remaining) with URL containing user id and year', async () => {
+    const currentYear = new Date().getUTCFullYear();
+    render(
+      <BrowserRouter>
+        <Leave user={{ id: 'mgr-456', role: ROLES.MANAGER }} />
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/allowance:/i)).toHaveTextContent('Allowance: 20 days');
+      expect(screen.getByText(/used:/i)).toHaveTextContent('Used: 5 days');
+      expect(screen.getByText(/remaining:/i)).toHaveTextContent('Remaining: 15 days');
+    });
+
+    expect(apiModule.api.get).toHaveBeenCalledWith(`/leaves/balance/mgr-456?year=${currentYear}`);
+  });
+
+  it('displays error message in balance card when balance API fails', async () => {
+    apiModule.api.get.mockImplementation((url) => {
+      if (url.includes('/employees?page=1&page_size=100')) {
+        return Promise.resolve({ items: mockEmployees, total: 2 });
+      }
+      if (url.includes('/leaves/balance/')) {
+        return Promise.reject(new Error('Failed to load leave balance details'));
+      }
+      if (url.includes('/leaves')) {
+        return Promise.resolve({ items: mockLeaves, total: 1 });
+      }
+      return Promise.resolve(null);
+    });
+
+    render(
+      <BrowserRouter>
+        <Leave user={{ id: 'emp-1', role: ROLES.EMPLOYEE }} />
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('balance-error-msg')).toHaveTextContent('Failed to load leave balance details');
+    });
   });
 
   it('EMPLOYEE role cannot see Approve button on leaves table', async () => {

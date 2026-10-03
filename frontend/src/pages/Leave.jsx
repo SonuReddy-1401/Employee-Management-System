@@ -32,6 +32,7 @@ export function Leave({ user }) {
   const [balanceYear, setBalanceYear] = useState(currentYear);
   const [balance, setBalance] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const [balanceError, setBalanceError] = useState(null);
 
   // Leave Form State
   const [formEmployeeId, setFormEmployeeId] = useState(isManagementAdminHR ? '' : user?.id || '');
@@ -75,18 +76,22 @@ export function Leave({ user }) {
   const fetchBalance = useCallback(async () => {
     if (!balanceSubjectId) {
       setBalance(null);
+      setBalanceError(null);
       return;
     }
     setBalanceLoading(true);
+    setBalanceError(null);
     try {
       const res = await api.get(`/leaves/balance/${balanceSubjectId}?year=${balanceYear}`);
       setBalance(res || null);
     } catch (err) {
       setBalance(null);
+      const errMsg = err.message || 'Failed to fetch leave balance';
+      setBalanceError(errMsg);
       if (err instanceof ApiError && err.status === 404) {
         // Employee not found in payroll
       } else {
-        showToast(err.message || 'Failed to fetch leave balance', 'error');
+        showToast(errMsg, 'error');
       }
     } finally {
       setBalanceLoading(false);
@@ -351,6 +356,10 @@ export function Leave({ user }) {
 
         {balanceLoading ? (
           <Spinner />
+        ) : balanceError ? (
+          <div style={{ color: 'var(--accent-danger)', fontSize: '0.875rem' }} data-testid="balance-error-msg">
+            {balanceError}
+          </div>
         ) : !balanceSubjectId ? (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
             Please select an employee to view leave balance.
@@ -358,9 +367,9 @@ export function Leave({ user }) {
         ) : balance ? (
           <div>
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
-              <div>Allowance: <strong>{balance.allowance_days} days</strong></div>
-              <div>Used: <strong>{balance.used_days} days</strong></div>
-              <div>Remaining: <strong style={{ color: 'var(--accent-success)' }}>{balance.remaining_days} days</strong></div>
+              <div>Allowance: <strong>{balance.allowance} days</strong></div>
+              <div>Used: <strong>{balance.used} days</strong></div>
+              <div>Remaining: <strong style={{ color: 'var(--accent-success)' }}>{balance.remaining} days</strong></div>
             </div>
             {/* Progress bar */}
             <div
@@ -374,7 +383,7 @@ export function Leave({ user }) {
             >
               <div
                 style={{
-                  width: `${Math.min(100, (balance.used_days / Math.max(1, balance.allowance_days)) * 100)}%`,
+                  width: `${Math.min(100, (balance.used / Math.max(1, balance.allowance)) * 100)}%`,
                   height: '100%',
                   backgroundColor: 'var(--accent-primary)',
                 }}

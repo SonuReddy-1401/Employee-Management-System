@@ -5,15 +5,13 @@ import { canSee } from './lib/permissions.js';
 import { Sidebar } from './components/Sidebar.jsx';
 import { TopBar } from './components/TopBar.jsx';
 import { Login } from './pages/Login.jsx';
+import { Dashboard } from './pages/Dashboard.jsx';
 import { Employees } from './pages/Employees.jsx';
 import { Leave } from './pages/Leave.jsx';
-import {
-  Dashboard,
-  Payroll,
-  Notifications,
-  System,
-  NotAllowed,
-} from './pages/PlaceholderPages.jsx';
+import { Payroll } from './pages/Payroll.jsx';
+import { Notifications } from './pages/Notifications.jsx';
+import { System } from './pages/System.jsx';
+import { NotAllowed } from './pages/PlaceholderPages.jsx';
 
 export function ProtectedRoute({ children, path }) {
   const user = getUser();
