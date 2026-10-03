@@ -11,7 +11,7 @@ import { Toast } from '../components/Toast.jsx';
 import { Badge } from '../components/Badge.jsx';
 import { Spinner } from '../components/Spinner.jsx';
 
-export function Leave({ user }) {
+export function Leave({ user, defaultTab = 'all' }) {
   const currentYear = new Date().getUTCFullYear();
 
   // State
@@ -22,7 +22,7 @@ export function Leave({ user }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [statusFilter, setStatusFilter] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'needs_decision'
+  const [activeTab, setActiveTab] = useState(defaultTab); // 'all' | 'needs_decision' | 'attendance'
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ type: 'error', message: '' });
 

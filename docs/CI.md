@@ -11,7 +11,7 @@ The CI pipeline runs automatically on `push` to the `main` branch, all `pull_req
 ## Workflow Jobs & Capabilities
 
 ### 1. `lint` Job
-- **Purpose**: Validates Python code syntax and structural formatting using Ruff.
+- **Purpose**: Validates Python code syntax errors, invalid comparisons, undefined names using Ruff.
 - **Proves**: Ensures no syntax errors (`E9`), invalid print/format specifiers (`F63`), invalid star imports (`F7`), or undefined variable names (`F82`) exist in the repository.
 - **Expected Duration**: Not measured yet (pending first GitHub Actions runner execution).
 - **Local Command**:

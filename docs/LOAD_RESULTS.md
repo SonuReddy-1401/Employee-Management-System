@@ -74,6 +74,6 @@ Prior to executing k6, `scripts/load.py` records a baseline count of records acr
    - The setup phase onboarded **15 setup employees**, and the onboarding scenario onboarded **120 employees**, generating **135 `EmployeeOnboarded` events** total across outbox, auth, employee, payroll, and notification services.
    - All 10,015 events were written to PostgreSQL outbox tables, published to RabbitMQ, and verified in downstream database tables with zero duplicate records and zero missing records.
 2. **Onboarding Saga Latency**:
-   - Cross-service employee onboarding (involving Employee, Auth, and Payroll synchronous HTTP calls plus RabbitMQ outbox publish) averaged **269.40 ms** per onboarding request with a p(95) of **296.90 ms**, well under the 3,000 ms SLA threshold.
+   - Cross-service employee onboarding (involving Employee, Auth, and Payroll synchronous HTTP calls plus RabbitMQ outbox publish) averaged **269.40 ms** per onboarding request with a p(95) of **296.90 ms**, well under the 3,000 ms test threshold chosen by the author.
 3. **Hardware Limitations**:
    - Test execution ran on a single development workstation hosting all 15 microservices, databases, Redis, RabbitMQ, Prometheus, and Grafana simultaneously.

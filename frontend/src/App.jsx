@@ -8,6 +8,7 @@ import { Login } from './pages/Login.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
 import { Employees } from './pages/Employees.jsx';
 import { Leave } from './pages/Leave.jsx';
+import { Attendance } from './pages/Attendance.jsx';
 import { Payroll } from './pages/Payroll.jsx';
 import { Notifications } from './pages/Notifications.jsx';
 import { System } from './pages/System.jsx';
@@ -94,6 +95,17 @@ export function AppContent() {
           <ProtectedRoute path="/leave">
             <AppLayout user={user} onLogout={handleLogout}>
               <Leave user={user} />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/attendance"
+        element={
+          <ProtectedRoute path="/attendance">
+            <AppLayout user={user} onLogout={handleLogout}>
+              <Attendance user={user} />
             </AppLayout>
           </ProtectedRoute>
         }

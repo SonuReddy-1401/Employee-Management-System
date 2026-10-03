@@ -19,8 +19,14 @@ export function Employees({ user }) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  // Filter state
   const [departmentFilter, setDepartmentFilter] = useState('');
+  const [designationFilter, setDesignationFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [managerFilter, setManagerFilter] = useState('');
   const [pageFilter, setPageFilter] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ type: 'error', message: '' });
 
@@ -60,8 +66,9 @@ export function Employees({ user }) {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
-  // Departments list built dynamically from loaded data + custom input
+  // Departments & Designations lists built dynamically from loaded data
   const [knownDepartments, setKnownDepartments] = useState([]);
+  const [knownDesignations, setKnownDesignations] = useState([]);
 
   const showToast = (message, type = 'success') => {
     setToast({ type, message });
@@ -81,10 +88,13 @@ export function Employees({ user }) {
         setEmployees(res.items || []);
         setTotal(res.total || 0);
 
-        // Update known departments
+        // Update known departments & designations
         if (res.items) {
           const depts = new Set(res.items.map((e) => e.department).filter(Boolean));
           setKnownDepartments((prev) => Array.from(new Set([...prev, ...depts])));
+
+          const desigs = new Set(res.items.map((e) => e.designation).filter(Boolean));
+          setKnownDesignations((prev) => Array.from(new Set([...prev, ...desigs])));
         }
       }
     } catch (err) {
@@ -118,12 +128,19 @@ export function Employees({ user }) {
 
   // Filter current page client-side
   const filteredEmployees = useMemo(() => {
-    if (!pageFilter.trim()) return employees;
-    const term = pageFilter.toLowerCase();
-    return employees.filter(
-      (e) => (e.name && e.name.toLowerCase().includes(term)) || (e.email && e.email.toLowerCase().includes(term))
-    );
-  }, [employees, pageFilter]);
+    return employees.filter((e) => {
+      if (pageFilter.trim()) {
+        const term = pageFilter.toLowerCase();
+        const matchName = e.name && e.name.toLowerCase().includes(term);
+        const matchEmail = e.email && e.email.toLowerCase().includes(term);
+        if (!matchName && !matchEmail) return false;
+      }
+      if (designationFilter && e.designation !== designationFilter) return false;
+      if (roleFilter && (e.role || '').toUpperCase() !== roleFilter.toUpperCase()) return false;
+      if (managerFilter && e.manager_id !== managerFilter) return false;
+      return true;
+    });
+  }, [employees, pageFilter, designationFilter, roleFilter, managerFilter]);
 
   // Manager ID to Name map
   const managerMap = useMemo(() => {
@@ -131,7 +148,6 @@ export function Employees({ user }) {
     managerOptions.forEach((m) => {
       map[m.id] = m.name;
     });
-    // Also include current employees if available
     employees.forEach((e) => {
       map[e.id] = e.name;
     });
@@ -332,42 +348,98 @@ export function Employees({ user }) {
       <Toast type={toast.type} message={toast.message} />
 
       {/* Filters bar */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: '200px' }}>
-          <label className="form-label" htmlFor="dept-filter">
-            Filter by Department (Server)
-          </label>
-          <input
-            id="dept-filter"
-            type="text"
-            className="form-input"
-            placeholder="e.g. Engineering"
-            value={departmentFilter}
-            onChange={(e) => {
-              setDepartmentFilter(e.target.value);
-              setPage(1);
-            }}
-            list="known-depts"
-          />
-          <datalist id="known-depts">
-            {knownDepartments.map((d) => (
-              <option key={d} value={d} />
-            ))}
-          </datalist>
-        </div>
-
-        <div style={{ flex: 1, minWidth: '200px' }}>
+      <div className="card" style={{ padding: '1rem', marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }} data-testid="employee-filter-bar">
+        <div style={{ flex: 1, minWidth: '180px' }}>
           <label className="form-label" htmlFor="page-filter">
-            Filter this page (Name/Email)
+            Search (Name / Email)
           </label>
           <input
             id="page-filter"
             type="text"
             className="form-input"
-            placeholder="Filter current page rows..."
+            placeholder="Search name or email..."
             value={pageFilter}
             onChange={(e) => setPageFilter(e.target.value)}
+            data-testid="employee-search-input"
           />
+        </div>
+
+        <div style={{ flex: 1, minWidth: '150px' }}>
+          <label className="form-label" htmlFor="dept-select">
+            Department
+          </label>
+          <select
+            id="dept-select"
+            className="form-select"
+            value={departmentFilter}
+            onChange={(e) => {
+              setDepartmentFilter(e.target.value);
+              setPage(1);
+            }}
+            data-testid="employee-dept-select"
+          >
+            <option value="">All Departments</option>
+            {knownDepartments.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ flex: 1, minWidth: '150px' }}>
+          <label className="form-label" htmlFor="desig-select">
+            Designation
+          </label>
+          <select
+            id="desig-select"
+            className="form-select"
+            value={designationFilter}
+            onChange={(e) => setDesignationFilter(e.target.value)}
+            data-testid="employee-desig-select"
+          >
+            <option value="">All Designations</option>
+            {knownDesignations.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ flex: 1, minWidth: '130px' }}>
+          <label className="form-label" htmlFor="role-select">
+            Role
+          </label>
+          <select
+            id="role-select"
+            className="form-select"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            data-testid="employee-role-select"
+          >
+            <option value="">All Roles</option>
+            <option value="EMPLOYEE">EMPLOYEE</option>
+            <option value="MANAGER">MANAGER</option>
+            <option value="HR">HR</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+        </div>
+
+        <div style={{ flex: 1, minWidth: '160px' }}>
+          <label className="form-label" htmlFor="manager-select">
+            Reporting Manager
+          </label>
+          <select
+            id="manager-select"
+            className="form-select"
+            value={managerFilter}
+            onChange={(e) => setManagerFilter(e.target.value)}
+            data-testid="employee-manager-select"
+          >
+            <option value="">All Managers</option>
+            {managerOptions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

@@ -1,0 +1,103 @@
+requirement_id;test_node_id;level
+R-001;services/auth/tests/integration/test_auth_api.py::test_create_user_success_and_login;integration
+R-001;tests/contract/test_auth_contract.py::test_auth_login_success;contract
+R-002;services/auth/tests/integration/test_auth_api.py::test_login_wrong_password;integration
+R-002;services/auth/tests/integration/test_auth_api.py::test_login_unknown_email;integration
+R-002;tests/contract/test_auth_contract.py::test_auth_login_invalid_credentials;contract
+R-003;services/auth/tests/integration/test_auth_api.py::test_create_user_success_and_login;integration
+R-003;tests/contract/test_auth_contract.py::test_auth_internal_users_lifecycle;contract
+R-004;services/auth/tests/integration/test_auth_api.py::test_create_user_duplicate_email;integration
+R-004;services/auth/tests/integration/test_auth_api.py::test_create_user_duplicate_id;integration
+R-004;services/auth/tests/integration/test_auth_api.py::test_create_user_invalid_role;integration
+R-004;services/auth/tests/integration/test_auth_api.py::test_create_user_short_password;integration
+R-005;services/auth/tests/integration/test_auth_api.py::test_delete_user_success_and_idempotency;integration
+R-005;tests/contract/test_auth_contract.py::test_auth_internal_users_repeated_delete;contract
+R-006;services/employee/tests/integration/test_employee_api.py::test_create_employee_success_and_fields;integration
+R-006;services/employee/tests/unit/test_saga_domain.py::test_saga_happy_path;unit
+R-006;tests/contract/test_employee_contract.py::test_employee_contract_lifecycle;contract
+R-006;tests/e2e/test_e2e_scenarios.py::test_full_leave_to_payroll_journey;e2e
+R-007;services/employee/tests/integration/test_employee_api.py::test_saga_payroll_500_failure_and_compensation;integration
+R-007;services/employee/tests/integration/test_employee_api.py::test_saga_auth_500_failure_no_compensation;integration
+R-007;services/employee/tests/unit/test_saga_domain.py::test_saga_payroll_non_success_triggers_auth_compensation;unit
+R-007;tests/chaos/test_01_onboarding_payroll_chaos.py::test_payroll_down_during_onboarding;chaos
+R-007;tests/chaos/test_02_onboarding_auth_chaos.py::test_auth_down_during_onboarding;chaos
+R-007;src/test/employeesPage.test.jsx > Employees Page Component > shows persistent ONBOARDING_FAILED panel on 502 saga failure;ui
+R-008;services/employee/tests/integration/test_employee_api.py::test_create_employee_duplicate_email;integration
+R-008;services/employee/tests/integration/test_employee_api.py::test_create_employee_invalid_manager;integration
+R-008;tests/contract/test_employee_contract.py::test_employee_invalid_manager_id;contract
+R-009;services/employee/tests/integration/test_employee_api.py::test_list_employees_pagination_and_filter;integration
+R-009;services/employee/tests/unit/test_employee_domain.py::test_pagination_math;unit
+R-010;services/employee/tests/integration/test_employee_api.py::test_get_employee_by_id_and_not_found;integration
+R-011;services/employee/tests/integration/test_employee_api.py::test_update_employee_success_and_validations;integration
+R-011;services/employee/tests/unit/test_employee_domain.py::test_manager_not_self_rule;unit
+R-012;services/employee/tests/integration/test_employee_api.py::test_delete_employee_soft_delete_and_idempotency;integration
+R-013;services/leave/tests/integration/test_leave_api.py::test_create_leave_success_and_outbox_event;integration
+R-013;services/leave/tests/unit/test_leave_domain.py::test_count_weekdays;unit
+R-013;tests/contract/test_leave_contract.py::test_leave_contract_lifecycle;contract
+R-014;services/leave/tests/integration/test_leave_api.py::test_create_leave_employee_not_found_422;integration
+R-014;services/leave/tests/integration/test_leave_api.py::test_create_leave_employee_not_active_422;integration
+R-014;services/leave/tests/integration/test_leave_api.py::test_create_leave_employee_service_down_503;integration
+R-014;services/leave/tests/integration/test_leave_api.py::test_create_leave_cache_hit_and_auth_header_forwarded;integration
+R-014;services/leave/tests/integration/test_leave_api.py::test_create_leave_redis_unreachable_fallback;integration
+R-014;tests/chaos/test_05_redis_fallback_chaos.py::test_redis_down_leave_creation;chaos
+R-015;services/leave/tests/integration/test_leave_api.py::test_create_leave_overlap_409;integration
+R-015;services/leave/tests/integration/test_leave_api.py::test_create_leave_paid_over_balance_422_and_unpaid_allowed;integration
+R-015;services/leave/tests/unit/test_leave_domain.py::test_ranges_overlap;unit
+R-015;services/leave/tests/unit/test_leave_domain.py::test_calculate_balance;unit
+R-016;services/leave/tests/integration/test_leave_api.py::test_approve_leave_by_own_manager_works;integration
+R-016;services/leave/tests/integration/test_leave_api.py::test_approve_leave_by_hr_works;integration
+R-016;services/leave/tests/integration/test_leave_api.py::test_second_approve_returns_409_and_single_outbox_row;integration
+R-016;services/leave/tests/unit/test_leave_domain.py::test_leave_state_machine_valid_and_invalid;unit
+R-016;tests/chaos/test_03_leave_rabbitmq_chaos.py::test_rabbitmq_down_during_leave_approval;chaos
+R-017;services/leave/tests/integration/test_leave_api.py::test_reject_leave_writes_outbox;integration
+R-017;tests/contract/test_leave_contract.py::test_leave_direct_reject_provider;contract
+R-018;services/leave/tests/integration/test_leave_api.py::test_cancel_pending_leave_no_event;integration
+R-018;services/leave/tests/integration/test_leave_api.py::test_cancel_approved_leave_writes_event;integration
+R-018;services/leave/tests/integration/test_leave_api.py::test_cancel_rejected_leave_returns_409;integration
+R-018;tests/contract/test_leave_contract.py::test_leave_direct_cancel_provider;contract
+R-018;tests/e2e/test_e2e_scenarios.py::test_cancelled_leave_removes_deduction;e2e
+R-019;services/leave/tests/integration/test_leave_api.py::test_list_leaves_visibility;integration
+R-019;tests/contract/test_leave_contract.py::test_leave_list_envelope;contract
+R-020;services/leave/tests/integration/test_leave_api.py::test_balance_endpoint_and_access_control;integration
+R-020;tests/contract/test_leave_contract.py::test_leave_balance_forbidden_for_other_employee;contract
+R-020;src/test/leavePage.test.jsx > Leave Page Component > renders EMPLOYEE leave balance (allowance, used, remaining) with URL containing user id and year;ui
+R-021;services/payroll/tests/integration/test_payroll_api.py::test_profile_crud_and_idempotency;integration
+R-021;tests/contract/test_payroll_contract.py::test_payroll_internal_profile_lifecycle;contract
+R-022;services/payroll/tests/integration/test_payroll_api.py::test_profile_crud_and_idempotency;integration
+R-022;tests/contract/test_payroll_contract.py::test_payroll_internal_profile_repeated_delete;contract
+R-023;services/payroll/tests/unit/test_payroll_domain.py::test_calculate_payslip_rounding_half_up;unit
+R-023;tests/contract/test_payroll_contract.py::test_payroll_run_and_payslips;contract
+R-023;tests/contract/test_payroll_contract.py::test_payroll_run_malformed_month;contract
+R-024;tests/contract/test_payroll_contract.py::test_payslips_forbidden_for_other_employee;contract
+R-025;services/notification/tests/integration/test_notification_api.py::test_consumer_handler_creates_and_skips_duplicates;integration
+R-025;services/notification/tests/integration/test_notification_api.py::test_n6_e2e_rabbitmq_notification_consumer;integration
+R-025;services/notification/tests/unit/test_notification_domain.py::test_build_notification_employee_onboarded;unit
+R-025;tests/contract/test_notification_contract.py::test_notification_contract_lifecycle;contract
+R-025;tests/chaos/test_04_notification_durability_chaos.py::test_notification_down_event_durability;chaos
+R-026;services/notification/tests/integration/test_notification_api.py::test_list_notifications_permissions;integration
+R-026;services/notification/tests/integration/test_notification_api.py::test_n4_list_notifications_limit_and_descending_order;integration
+R-026;src/test/notificationsPage.test.jsx > Notifications Page Component > handles empty notifications list gracefully with EmptyState;ui
+R-027;tests/integration/test_broker.py::test_outbox_publish_to_broker;integration
+R-027;tests/test_outbox_consumer.py::test_outbox_row_creation;unit
+R-027;services/employee/tests/integration/test_employee_outbox_publisher.py::test_employee_real_outbox_publisher_loop;integration
+R-027;services/leave/tests/integration/test_leave_outbox_publisher.py::test_leave_real_outbox_publisher_loop;integration
+R-028;tests/integration/test_broker.py::test_run_consumer_idempotency;integration
+R-028;tests/integration/test_broker.py::test_run_consumer_retries_to_dlq;integration
+R-028;tests/test_outbox_consumer.py::test_consumer_idempotency_blocks_duplicate;unit
+R-028;tests/integration/test_consumer_startup_resilience.py::test_message_received_once_after_connect;integration
+R-029;tests/contract/test_gateway_contract.py::test_gateway_unknown_path_404;contract
+R-029;tests/contract/test_gateway_contract.py::test_gateway_internal_path_blocked_404;contract
+R-030;tests/contract/test_gateway_contract.py::test_gateway_missing_token_401;contract
+R-030;tests/e2e/test_e2e_scenarios.py::test_permissions_through_gateway;e2e
+R-031;tests/load/test_load_verify.py::test_expected_from_summary_success;load
+R-032;tests/test_correlation.py::test_middleware_generates_correlation_id_when_missing;unit
+R-032;tests/test_correlation.py::test_middleware_echoes_provided_correlation_id;unit
+R-032;tests/e2e/test_e2e_scenarios.py::test_correlation_id_round_trip;e2e
+R-033;src/test/dashboardPage.test.jsx > Dashboard Page Component > renders ADMIN cards with NO personal cards and total API request count <= 6;ui
+R-033;src/test/dashboardPage.test.jsx > Dashboard Page Component > renders HR cards with total API request count <= 6;ui
+R-033;"src/test/dashboardPage.test.jsx > Dashboard Page Component > renders MANAGER cards including ""Awaiting my decision"" section and balance numbers with request count <= 6";ui
+R-034;src/test/employeesPage.test.jsx > Employees Page Component > renders write buttons (+ Onboard Employee) for ADMIN and HR, but hides them for MANAGER;ui
+R-035;src/test/leavePage.test.jsx > Leave Page Component > blocks weekend-only date range submit without calling the API;ui
+R-035;src/test/leaveRules.test.js > leaveRules utility > leaveActions > EMPLOYEE role actions;unit
+R-036;src/test/payrollPage.test.jsx > Payroll Page Component > renders Run Payroll card for ADMIN and HR, but hides it for EMPLOYEE;ui
+R-037;src/test/systemPage.test.jsx > System Page Component > maps HTTP 200 to UP and other status/error to DOWN, and renders telemetry links;ui

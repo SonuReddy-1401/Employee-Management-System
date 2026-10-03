@@ -6,6 +6,7 @@ const ALL_NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard' },
   { path: '/employees', label: 'Employees' },
   { path: '/leave', label: 'Leave' },
+  { path: '/attendance', label: 'Attendance' },
   { path: '/payroll', label: 'Payroll' },
   { path: '/notifications', label: 'Notifications' },
   { path: '/system', label: 'System' },
@@ -18,7 +19,10 @@ export function Sidebar({ user }) {
 
   return (
     <aside className="sidebar" data-testid="sidebar">
-      <div className="sidebar-header">EMS Portal</div>
+      <div className="sidebar-header">
+        <div className="sidebar-header-icon">E</div>
+        <span>EMS Portal</span>
+      </div>
       <nav className="sidebar-nav">
         {allowedItems.map((item) => (
           <NavLink

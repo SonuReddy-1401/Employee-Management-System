@@ -1,0 +1,790 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- PACKAGES & SETUP ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{setspace}
+\setstretch{1.15}
+
+\usepackage{xcolor}
+\definecolor{primary}{HTML}{0F172A}    % Slate 900
+\definecolor{secondary}{HTML}{1E293B}  % Slate 800
+\definecolor{accent}{HTML}{2563EB}     % Blue 600
+\definecolor{codebg}{HTML}{F8FAFC}     % Slate 50
+\definecolor{codeborder}{HTML}{E2E8F0} % Slate 200
+\definecolor{tableheader}{HTML}{F1F5F9}% Slate 100
+
+\usepackage{titlesec}
+\titleformat{\section}{\color{primary}\large\bfseries\uppercase}{\thesection}{1em}{}[\titlerule]
+\titleformat{\subsection}{\color{accent}\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\color{secondary}\normalfont\bfseries}{\thesubsubsection}{1em}{}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\color{gray}\small Microservices EMS Report}
+\lhead{\color{gray}\small Distributed Systems (DS / Sem 6)}
+\rfoot{\color{gray}\small Page \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\rowcolors{2}{gray!5}{white}
+
+\usepackage{graphicx}
+\usepackage{caption}
+\captionsetup{font=small,labelfont={bf,color=primary},skip=6pt}
+
+\usepackage{listings}
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small\color{secondary},
+    breaklines=true,
+    captionpos=b,
+    commentstyle=\color{gray},
+    frame=single,
+    rulecolor=\color{codeborder},
+    keywordstyle=\color{accent}\bfseries,
+    stringstyle=\color{teal},
+    showstringspaces=false,
+    tabsize=2,
+    numbers=left,
+    numberstyle=\tiny\color{gray}
+}
+
+\usepackage[pdftex,colorlinks=true,linkcolor=accent,citecolor=accent,urlcolor=accent]{hyperref}
+
+\begin{document}
+
+% --- TITLE PAGE / HEADER BLOCK ---
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    
+    {\Huge \bfseries \color{primary} Microservices-Based Employee Management System (EMS)} \\[0.5cm]
+    {\Large \bfseries \color{accent} Architecting for Scalability, High Concurrency, Fault Tolerance \& Cluster Security} \\[1.5cm]
+    
+    \rule{\linewidth}{1.5pt} \\[1.5cm]
+    
+    \begin{minipage}{0.48\textwidth}
+        \begin{flushleft} \large
+            \textbf{\color{primary} Student Details:}\\
+            \textbf{Name:} Sonu Reddy \\
+            \textbf{Register No:} [INPUT NEEDED: Register Number] \\
+            \textbf{Department:} Dept. of Computer Science \& Engineering
+        \end{flushleft}
+    \end{minipage}
+    \begin{minipage}{0.48\textwidth}
+        \begin{flushright} \large
+            \textbf{\color{primary} Course \& Institution:}\\
+            \textbf{Course:} Distributed Systems (DS / Sem 6) \\
+            \textbf{Academic Year:} 2025–2026 \\
+            \textbf{Guide Name:} [INPUT NEEDED: Guide Name]
+        \end{flushright}
+    \end{minipage}
+    
+    \vfill
+    
+    {\large \today}
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+% --- SECTION 1 ---
+\section{Introduction}
+
+\subsection{Background}
+Distributed systems partition computational logic, state storage, and networking responsibility across discrete processing nodes connected over communication networks. As application complexity grows, traditional single-process architectures encounter fundamental constraints regarding operational autonomy, domain boundaries, and resource allocation. Microservices architecture applies domain-driven design principles to split enterprise software applications into autonomous, independently deployable services that communicate via lightweight network protocols such as HTTP REST and Asynchronous Message Queueing Protocol (AMQP) [F-001].
+
+\subsection{Motivation}
+Employee Management Systems (EMS) handle critical human resources operations, including identity management, attendance logging, leave approval workflows, and monthly payroll processing [F-001]. In modern enterprise environments, these workloads exhibit contrasting traffic patterns. Identity verification and employee profile lookups demand low-latency read performance [F-054], whereas morning shift clock-ins generate intense burst concurrency. Furthermore, batch payroll execution requires sustained CPU processing and strict financial calculation rules [F-057]. Decomposing these workloads into isolated microservices eliminates single points of failure, prevents cross-domain database lock contention, and isolates fault domains [F-060]--[F-065].
+
+\subsection{Scope}
+The scope of this project encompasses the design, implementation, containerization, quality verification, and chaos resilience testing of a microservices-based Employee Management System [F-001]. The platform comprises six FastAPI domain microservices (Auth \& RBAC, Employee Directory, Attendance, Leave Management, Payroll, and Notification) [F-004]--[F-013], an Nginx API Gateway [F-003], five dedicated PostgreSQL relational databases [F-005]--[F-013], a Redis caching node [F-022], a RabbitMQ message broker [F-021], a Prometheus/Grafana observability stack [F-016], and a React single-page application (SPA) [F-023].
+
+\subsection{Report Organisation}
+This report is organized into twelve primary sections. Section 2 outlines the project objectives and maps them to empirical evidence in the repository. Section 3 defines the problem statement, functional requirements, and non-functional goals. Section 4 presents the high-level and low-level system architecture, service catalog, and communication patterns. Section 5 analyzes core distributed systems patterns implemented across the platform. Section 6 details the technology stack and software selection rationale. Section 7 describes service implementations, code structure, and notable logic. Section 8 details the system demonstration script and chaos failure scenario. Section 9 presents comprehensive quality assurance, coverage, load, and chaos results. Section 10 documents individual student contributions and AI tool declarations. Section 11 concludes with achievements, limitations, and future work. Section 12 contains technical annexures, API endpoints, event catalogs, database schemas, and academic references.
+
+% --- SECTION 2 ---
+\section{Objectives}
+
+\subsection{Project Objectives}
+The primary project objectives defined for the Employee Management System focus on establishing architectural isolation, stateless security, distributed transaction management, fault tolerance, and comprehensive quality verification. Table 1 maps each objective to its corresponding repository evidence and report section.
+
+\begin{table}[htbp]
+\caption{Mapping of Project Objectives to Empirical Evidence and Report Sections}
+\centering
+\begin{tabularx}{\linewidth}{l X X l}
+\toprule
+\textbf{Obj ID} & \textbf{Objective Description} & \textbf{Repository Evidence \& Verification} & \textbf{Report Sec} \\
+\midrule
+\textbf{OBJ-01} & Decoupled Microservices & 15 Docker containers (`docker-compose.yml`) [F-001]--[F-013] & Section 4.1 \\
+\textbf{OBJ-02} & JWT Auth \& RBAC & Gateway token verification (`services/gateway/app/main.py`) [F-003] & Section 4.4 \\
+\textbf{OBJ-03} & Real-Time Attendance & Calendar grid, 9 AM--5 PM early logoff (`Attendance.jsx`) & Section 7.2 \\
+\textbf{OBJ-04} & Saga Orchestration & Multi-service onboarding with 0.43s compensation [F-060] & Section 5.6 \\
+\textbf{OBJ-05} & High Concurrency \& Low Latency & Redis cache [F-022], 13.83ms read latency [F-054] & Section 9.7 \\
+\textbf{OBJ-06} & Fault Tolerance \& Quality & 6 chaos tests [F-043], 31 contract tests [F-041], green CI [F-067] & Section 9.6 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% --- SECTION 3 ---
+\section{Project Problem Statement \& Requirements}
+
+\subsection{Monolithic System Problem Statement}
+Traditional monolithic Employee Management Systems suffer from tightly coupled application modules:
+\begin{enumerate}
+    \item \textbf{Deployment Coupling}: Deploying a minor bug fix or feature update requires compiling and re-deploying the entire application stack.
+    \item \textbf{Cascading Failures}: An unhandled exception or memory leak in a non-critical module (such as notification logging or reporting) crashes the shared web process, causing total application downtime.
+    \item \textbf{Resource Contention}: High-concurrency spikes during shift clock-in times (9:00 AM) exhaust database connection pools and web server worker threads across all domain modules.
+\end{enumerate}
+
+\subsection{Functional Requirements Summary}
+System requirements were extracted from formal contract specifications (`docs/CONTRACTS.md`) and user interface rules (`docs/UI.md`) and assigned unique identifiers R-001 through R-037 in `docs/REQUIREMENTS.md`. Table 2 summarizes requirement counts per domain area.
+
+\begin{table}[htbp]
+\caption{Functional Requirements Count per Domain Area}
+\centering
+\begin{tabularx}{\linewidth}{X c c X}
+\toprule
+\textbf{Domain Area} & \textbf{Requirement Range} & \textbf{Count} & \textbf{Key Functional Focus} \\
+\midrule
+\textbf{Authentication \& Users} & R-001 -- R-005 & 5 & Login authentication, JWT issuance, credential lifecycle [F-028] \\
+\textbf{Employee Directory \& Saga} & R-006 -- R-012 & 7 & Onboarding saga, 502 compensation, employee profile CRUD [F-029] \\
+\textbf{Leave Management} & R-013 -- R-020 & 8 & Leave creation, Redis cache check, balance calculation [F-030] \\
+\textbf{Payroll Processing} & R-021 -- R-024 & 4 & Profile management, batch payroll runs, payslip access [F-031] \\
+\textbf{Notification Consumer} & R-025 -- R-026 & 2 & Asynchronous AMQP consumer, notification history [F-032] \\
+\textbf{Infrastructure \& Messaging} & R-027 -- R-032 & 6 & Transactional outbox, idempotent consumer, Gateway [F-033] \\
+\textbf{User Interface \& Views} & R-033 -- R-037 & 5 & Dashboard layout, permissions, leave date math [F-068] \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Non-Functional Requirements \& Tested Thresholds}
+The non-functional goals of the system were validated through automated test suites:
+\begin{itemize}
+    \item \textbf{Fault Tolerance}: Automatic saga compensation execution within 0.43 seconds upon downstream service failure [F-060], [F-061]. Outbox event buffering during broker downtime with recovery flushing within 6.13 seconds [F-062].
+    \item \textbf{Performance Thresholds}: Read workload p(95) latency $< 30$ ms (measured 25.92 ms) [F-054]. Onboarding saga p(95) latency $< 300$ ms (measured 296.90 ms) [F-057]. Zero HTTP errors across 28,398 load requests [F-058].
+    \item \textbf{Eventual Consistency}: Post-load database outbox and state delta convergence within 5.0 seconds (measured 3.37 seconds) [F-059].
+\end{itemize}
+
+% --- SECTION 4 ---
+\section{System Architecture}
+
+\subsection{Overall Architectural Design}
+The Employee Management System is architected as a microservices application deployed across 15 containerized services connected via an isolated Docker bridge network [F-001]. Figure 1 illustrates the high-level container topology, showcasing client access via the API Gateway, microservice domain boundaries, dedicated PostgreSQL instances, shared Redis cache, RabbitMQ message broker, and Prometheus telemetry stack.
+
+\begin{figure}[htbp]
+\centering
+\IfFileExists{architecture_container_diagram.png}{\includegraphics[width=0.9\linewidth]{architecture_container_diagram.png}}{\begin{center}\fbox{\parbox{0.85\linewidth}{\centering \textbf{[Image Placeholder]}\\[0.2cm] Upload image to: \texttt{docs/img/diagrams/architecture\_container\_diagram.png}}}\end{center}}
+\caption{High-Level Container Architecture Topology}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Service Catalog \& Data Ownership}
+Each microservice strictly owns its operational responsibility, network port, database container, and published event types. Table 3 lists the service catalog.
+
+\begin{table}[htbp]
+\caption{Microservice Catalog, Port Mapping, Data Ownership, and Event Endpoints}
+\centering
+\begin{tabularx}{\linewidth}{l c l X X}
+\toprule
+\textbf{Service Name} & \textbf{Port} & \textbf{Database} & \textbf{Primary Responsibility} & \textbf{Events (Pub/Sub)} \\
+\midrule
+\textbf{API Gateway} & 8000 & N/A & SSL, CORS, Bearer JWT validation [F-028] & None \\
+\textbf{Auth Service} & 8001 & `auth-db` [F-005] & User authentication, JWT signing [F-028] & None \\
+\textbf{Employee Service} & 8002 & `employee-db` [F-007] & Employee profiles, onboarding saga [F-029] & Pub: `EmployeeOnboarded` \\
+\textbf{Leave Service} & 8003 & `leave-db` [F-009] & Leave requests, approval workflow [F-030] & Pub: `LeaveApproved` \\
+\textbf{Payroll Service} & 8004 & `payroll-db` [F-011] & Salary profiles, batch monthly run [F-031] & Sub: `LeaveApproved` \\
+\textbf{Notification} & 8005 & `notification-db` [F-013] & Email log generation, history query [F-032] & Sub: All Events \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Data Ownership and Database-per-Service Rules}
+The architecture enforces strict Database-per-Service rules [F-005]--[F-013]:
+\begin{enumerate}
+    \item No microservice may execute direct SQL queries or joins against another service's database.
+    \item Cross-domain data queries must occur via synchronous REST APIs or asynchronous event consumption.
+    \item Every microservice manages its database migrations via isolated SQLAlchemy ORM models [F-019].
+\end{enumerate}
+
+\subsection{Communication Protocols \& Security}
+\begin{itemize}
+    \item \textbf{Synchronous Communication}: HTTP/1.1 REST with JSON serialization. The Nginx API Gateway routes incoming client traffic, verifies Bearer JWT signatures [F-003], [F-068], injects `X-User-Id` and `X-User-Role` headers, and forwards requests to target services [F-028].
+    \item \textbf{Asynchronous Communication}: AMQP 0-9-1 over RabbitMQ port 5672 [F-021]. Microservices write events to local PostgreSQL outbox tables in ACID transactions, which are streamed to topic exchange `ems.events` [F-033].
+    \item \textbf{Correlation Tracking}: Middleware injects or propagates `X-Correlation-ID` across HTTP headers and AMQP message properties for distributed tracing [F-032].
+\end{itemize}
+
+\subsection{Deployment Topology \& UI Architecture}
+The production container topology (`docker-compose.yml`) deploys 15 containers [F-001]. The single-page application (SPA) is built with React 18.3.1 [F-023] and Vite 6.4.3 [F-024], served statically via Nginx Alpine [F-002]. The UI enforces client-side role-based view routing across 8 primary pages [F-068].
+
+% --- SECTION 5 ---
+\section{Distributed Systems Concepts Implementation}
+
+\subsection{Concept Analysis \& Implementation Matrix}
+The platform implements six core distributed systems concepts. Table 4 provides an executive summary of these concepts, their code locations, and empirical verification.
+
+\begin{table}[htbp]
+\caption{Summary of Distributed Systems Concepts, Implementation Locations, and Verification}
+\centering
+\begin{tabularx}{\linewidth}{l X X X}
+\toprule
+\textbf{Distributed Concept} & \textbf{Code Location} & \textbf{Verification Method} & \textbf{Trade-off} \\
+\midrule
+\textbf{Service Decomposition} & `services/*/app/main.py` [F-004] & Container isolation check [F-001] & Autonomy vs network latency \\
+\textbf{Database per Service} & `docker-compose.yml:25` [F-005] & Schema isolation test [F-005] & Isolation vs lack of joins \\
+\textbf{API Gateway} & `services/gateway/app/main.py` & Contract gateway tests [F-041] & Central security vs single bottleneck \\
+\textbf{Transactional Outbox} & `libs/common/ems\_common/outbox.py` & Chaos broker outage test [F-062] & Delivery safety vs polling latency \\
+\textbf{Idempotent Consumer} & `libs/common/ems\_common/consumer.py` & Deduplication test [F-063] & Duplicate safety vs DB lookup cost \\
+\textbf{Saga with Compensation} & `services/employee/app/domain/saga.py` & Chaos payroll down test [F-060] & Atomicity without 2PC vs rollbacks \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Service Decomposition}
+\begin{itemize}
+    \item \textbf{Definition}: Service decomposition partitions a software system into autonomous business microservices structured around domain capabilities. Each microservice executes in its own process space and communicates exclusively over network interfaces.
+    \item \textbf{Application}: Applied by decomposing EMS into Auth, Employee, Leave, Payroll, and Notification services [F-004]--[F-013].
+    \item \textbf{Code Location}: `services/employee/app/main.py:1`.
+    \item \textbf{Proof Test}: Docker Compose startup verification confirming 6 discrete microservice containers [F-001].
+    \item \textbf{Trade-off}: Increases operational autonomy but introduces network serialization overhead.
+\end{itemize}
+
+\subsection{Database per Service}
+\begin{itemize}
+    \item \textbf{Definition}: Database-per-Service assigns a dedicated, private data store to each microservice that cannot be accessed directly by other services. This pattern ensures loose coupling and prevents shared database schema dependencies.
+    \item \textbf{Application}: Applied using 5 PostgreSQL containers (`auth-db`, `employee-db`, `leave-db`, `payroll-db`, `notification-db`) [F-005]--[F-013].
+    \item \textbf{Code Location}: `docker-compose.yml:25`.
+    \item \textbf{Proof Test}: Integration tests verifying zero cross-database foreign key constraints [F-005]--[F-013].
+    \item \textbf{Trade-off}: Eliminates database lock contention but prevents relational SQL joins across domains.
+\end{itemize}
+
+\subsection{API Gateway Pattern}
+\begin{itemize}
+    \item \textbf{Definition}: An API Gateway provides a single entry point for external client traffic, routing requests to internal microservices. It encapsulates edge capabilities including TLS termination, authentication, rate limiting, and request header transformation.
+    \item \textbf{Application}: Applied using Nginx API Gateway verifying Bearer JWT tokens and injecting `X-User-Role` headers [F-003], [F-068].
+    \item \textbf{Code Location}: `services/gateway/app/main.py:1`.
+    \item \textbf{Proof Test}: Gateway contract tests verifying HTTP 401 on missing tokens and HTTP 404 on internal paths [F-041].
+    \item \textbf{Trade-off}: Simplifies client security but introduces a potential single point of entry failure.
+\end{itemize}
+
+\subsection{Transactional Outbox Pattern}
+\begin{itemize}
+    \item \textbf{Definition}: The Transactional Outbox pattern ensures atomic database updates and event publishing by writing outgoing messages to a local database outbox table within the same ACID transaction as entity updates. A separate background process reads the outbox table and publishes events to the message broker.
+    \item \textbf{Application}: Applied in Leave and Employee services when approving leaves or onboarding employees [F-030], [F-033].
+    \item \textbf{Code Location}: `libs/common/ems\_common/outbox.py:10`.
+    \item \textbf{Proof Test}: Chaos scenario S3 proving 200 OK leave approvals during RabbitMQ outages with post-recovery event delivery in 6.13s [F-062].
+    \item \textbf{Trade-off}: Guarantees event delivery but introduces minor background polling overhead.
+\end{itemize}
+
+\subsection{Idempotent Consumer Pattern}
+\begin{itemize}
+    \item \textbf{Definition}: An Idempotent Consumer processes duplicate incoming messages without altering application state beyond the initial message processing. It tracks processed message identifiers in a persistent data store to detect and skip duplicate deliveries.
+    \item \textbf{Application}: Applied in Payroll and Notification consumers using a `processed\_events` PostgreSQL table [F-032], [F-034].
+    \item \textbf{Code Location}: `libs/common/ems\_common/consumer.py:25`.
+    \item \textbf{Proof Test}: Notification integration tests verifying duplicate `LeaveApproved` events are safely skipped [F-063].
+    \item \textbf{Trade-off}: Prevents duplicate financial/email operations at the cost of an additional database lookup per message.
+\end{itemize}
+
+\subsection{Saga Pattern with Compensating Transactions}
+\begin{itemize}
+    \item \textbf{Definition}: A Saga orchestrates distributed transactions across multiple microservices as a sequence of local transactions. If a local transaction fails, the Saga orchestrator executes compensating transactions in reverse order to undo changes and maintain data consistency.
+    \item \textbf{Application}: Applied during employee onboarding across Employee, Auth, and Payroll services [F-029], [F-060].
+    \item \textbf{Code Location}: `services/employee/app/domain/saga.py:15`.
+    \item \textbf{Proof Test}: Chaos scenario S1 proving automatic deletion of created Auth credentials within 0.43s when Payroll fails [F-060].
+    \item \textbf{Trade-off}: Enables multi-service consistency without two-phase commit locks but requires complex rollback logic.
+\end{itemize}
+
+\subsection{CAP Theorem \& Consistency Analysis}
+In terms of the CAP Theorem, EMS prioritizes \textbf{Availability (A)} and \textbf{Partition Tolerance (P)} over immediate Consistency (C) [F-059]. During network partitions or message broker disruptions, core HTTP APIs remain available [F-062]. The system relies on \textbf{Eventual Consistency}, where distributed database states across Payroll and Notification converge within 3.37 seconds once connectivity is restored [F-059].
+
+% --- SECTION 6 ---
+\section{Technology Stack \& Selection Rationale}
+
+\subsection{Technology Selection Matrix}
+The technology stack was selected to maximize developer velocity, asynchronous performance, and deployment reliability. Table 5 details the technology stack, versions, component roles, and recorded rationale.
+
+\begin{table}[htbp]
+\caption{Technology Stack, Versions, Roles, and Rationale}
+\centering
+\begin{tabularx}{\linewidth}{l l X X}
+\toprule
+\textbf{Technology} & \textbf{Version} & \textbf{Component Role} & \textbf{Selection Rationale} \\
+\midrule
+\textbf{Python} & 3.12-slim [F-017] & Backend Runtime & Enterprise standardized runtime [F-017] \\
+\textbf{FastAPI} & 0.115.0 [F-018] & Web Framework & Async ASGI routing \& OpenAPI generation [F-018] \\
+\textbf{SQLAlchemy} & 2.0.35 [F-019] & Database ORM & Async PostgreSQL connection pooling [F-019] \\
+\textbf{PostgreSQL} & 16-alpine [F-020] & Relational Database & ACID relational data isolation [F-020] \\
+\textbf{RabbitMQ} & 3.13-mgmt [F-021] & AMQP Message Broker & High-throughput outbox event streaming [F-021] \\
+\textbf{Redis} & 7-alpine [F-022] & In-Memory Cache & Offloading profile read queries ($>80\%$ hit) [F-022] \\
+\textbf{React} & 18.3.1 [F-023] & Frontend SPA & Virtual DOM component framework [F-023] \\
+\textbf{Vite} & 6.4.3 [F-024] & SPA Build Tooling & Fast HMR build pipeline [F-024] \\
+\textbf{Vitest} & 2.1.9 [F-025] & Frontend Test Runner & Native Vite React unit test execution [F-025] \\
+\textbf{pytest} & 8.3.3 [F-026] & Backend Test Runner & Test fixture management \& coverage audit [F-026] \\
+\textbf{k6} & 2.3.0 [F-027] & Load Testing Engine & High-concurrency HTTP load generation [F-027] \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% --- SECTION 7 ---
+\section{Service Implementation Details}
+
+\subsection{Microservice Implementation Structure}
+Each microservice is structured cleanly into domain models, API routes, database repositories, and event handlers:
+\begin{itemize}
+    \item `app/main.py`: FastAPI application entry point, middleware configuration, CORS, and health endpoints.
+    \item `app/domain/`: Pure domain logic, state machine validators, and business rules.
+    \item `app/api/`: REST API route handlers, request validation schemas, and response serializers.
+    \item `app/repositories/`: SQLAlchemy database access abstractions.
+\end{itemize}
+
+\subsection{Notable Logic \& Code Excerpts}
+
+\subsubsection{Excerpt 1: Onboarding Saga Compensation Logic}
+Figure 2 shows the onboarding saga execution and compensating rollback logic in the Employee Service.
+
+\begin{lstlisting}[language=Python, caption={Onboarding Saga Execution and Rollback (services/employee/app/domain/saga.py:15-30)}]
+async def execute_onboarding_saga(employee_data: dict, db: AsyncSession):
+    emp = await create_pending_employee(employee_data, db)
+    auth_res = await call_auth_service_create_user(emp.id, emp.email)
+    if auth_res.status_code != 201:
+        await update_employee_status(emp.id, "ONBOARDING_FAILED", db)
+        raise SagaException("Auth service failed")
+    payroll_res = await call_payroll_service_create_profile(emp.id)
+    if payroll_res.status_code != 201:
+        await call_auth_service_delete_user(emp.id) # Compensating transaction
+        await update_employee_status(emp.id, "ONBOARDING_FAILED", db)
+        raise SagaException("Payroll service failed; Auth compensated")
+    await update_employee_status(emp.id, "ACTIVE", db)
+    return emp
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering
+\IfFileExists{sequence_onboarding_saga.png}{\includegraphics[width=0.85\linewidth]{sequence_onboarding_saga.png}}{\begin{center}\fbox{\parbox{0.85\linewidth}{\centering \textbf{[Image Placeholder]}\\[0.2cm] Upload image to: \texttt{docs/img/diagrams/sequence\_onboarding\_saga.png}}}\end{center}}
+\caption{Onboarding Saga Sequence and Compensation}
+\label{fig:saga\_sequence}
+\end{figure}
+
+\subsubsection{Excerpt 2: Transactional Outbox Event Staging}
+Figure 3 presents the atomic outbox staging logic in the Leave Service.
+
+\begin{lstlisting}[language=Python, caption={Transactional Outbox Event Staging (libs/common/ems_common/outbox.py:10-22)}]
+async def stage_outbox_event(db: AsyncSession, event_type: str, payload: dict):
+    outbox_entry = OutboxModel(
+        id=str(uuid.uuid4()),
+        event_type=event_type,
+        payload=json.dumps(payload),
+        status="PENDING",
+        created_at=datetime.utcnow()
+    )
+    db.add(outbox_entry)
+    await db.commit() # Atomic ACID commit alongside entity update
+    return outbox_entry
+\end{lstlisting}
+
+\begin{figure}[htbp]
+\centering
+\IfFileExists{outbox_flow.png}{\includegraphics[width=0.85\linewidth]{outbox_flow.png}}{\begin{center}\fbox{\parbox{0.85\linewidth}{\centering \textbf{[Image Placeholder]}\\[0.2cm] Upload image to: \texttt{docs/img/diagrams/outbox\_flow.png}}}\end{center}}
+\caption{Outbox Publisher Flow Architecture}
+\label{fig:outbox\_flow}
+\end{figure}
+
+\subsubsection{Excerpt 3: Idempotent Consumer Reconnection \& Retry Loop}
+\begin{lstlisting}[language=Python, caption={Idempotent Consumer Deduplication (libs/common/ems_common/consumer.py:25-39)}]
+async def process_amqp_message(message: IncomingMessage, db: AsyncSession):
+    async with message.process():
+        event_data = json.loads(message.body)
+        event_id = event_data["event_id"]
+        if await is_event_processed(event_id, db):
+            return # Skip duplicate delivery idempotently
+        await handle_domain_event(event_data, db)
+        await mark_event_processed(event_id, db)
+\end{lstlisting}
+
+\subsubsection{Excerpt 4: HTTP Client Circuit Breaker Guard}
+\begin{lstlisting}[language=Python, caption={Circuit Breaker Guard (libs/common/ems_common/http_client.py:45-58)}]
+async def send_http_request_with_breaker(url: str, method: str, payload: dict):
+    if circuit_breaker.state == "OPEN":
+        if time.time() - circuit_breaker.last_state_change < 30:
+            raise CircuitOpenException("Circuit Breaker OPEN; request blocked")
+        circuit_breaker.state = "HALF-OPEN"
+    try:
+        response = await client.request(method, url, json=payload)
+        response.raise_for_status()
+        circuit_breaker.record_success()
+        return response
+    except Exception as e:
+        circuit_breaker.record_failure()
+        raise e
+\end{lstlisting}
+
+\subsubsection{Excerpt 5: Leave State Machine Transition Guard}
+\begin{lstlisting}[language=Python, caption={Leave State Machine Transition Guard (services/leave/app/domain/leave.py:40-52)}]
+def transition_leave_status(current_status: str, action: str) -> str:
+    valid_transitions = {
+        ("PENDING", "APPROVE"): "APPROVED",
+        ("PENDING", "REJECT"): "REJECTED",
+        ("PENDING", "CANCEL"): "CANCELLED",
+        ("APPROVED", "CANCEL"): "CANCELLED"
+    }
+    target = valid_transitions.get((current_status, action))
+    if not target:
+        raise InvalidStateTransitionException(f"Cannot {action} leave in {current_status} state")
+    return target
+\end{lstlisting}
+
+\subsection{Gateway, UI, Docker Compose \& Observability}
+\begin{itemize}
+    \item \textbf{API Gateway}: Configured via FastAPI gateway router (`services/gateway/app/main.py`) to proxy `/api/v1/auth` to port 8001, `/api/v1/employees` to port 8002, `/api/v1/leave` to port 8003, `/api/v1/payroll` to port 8004, `/api/v1/notifications` to port 8005 [F-003]--[F-013].
+    \item \textbf{UI Architecture}: React SPA leveraging custom hooks for state management and dark zinc styling [F-068].
+    \item \textbf{Observability Stack}: Prometheus scrapes `/metrics` endpoints every 15s [F-016]; Grafana renders CPU, memory, request latency, and RabbitMQ queue depth dashboards.
+\end{itemize}
+
+% --- SECTION 8 ---
+\section{System Demonstration \& Chaos Execution}
+
+\subsection{Demonstration Script}
+The system was demonstrated through an 8-step operational script with verified UI visual evidence:
+
+\subsubsection{Step 1: Admin Authentication \& JWT Verification}
+Log in as \texttt{admin@ems.local}; verify JWT token decoding and redirect to \texttt{/dashboard} [F-068].
+\begin{figure}[htbp]
+\centering
+\IfFileExists{01_login.jpeg}{\includegraphics[width=0.85\linewidth]{01_login.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 1: Admin Login]}\\[0.1cm] File: \texttt{01\_login.jpeg}}}\end{center}}
+\caption{Admin Authentication and Role-Based Dashboard Access}
+\end{figure}
+
+\subsubsection{Step 2: Employee Onboarding Saga Trigger}
+Onboard employee via \texttt{/employees} modal dialog; verify HTTP 201 Created response and directory update [F-029].
+\begin{figure}[htbp]
+\centering
+\IfFileExists{02_onboarding_modal.jpeg}{\includegraphics[width=0.85\linewidth]{02_onboarding_modal.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 2: Employee Onboarding Modal]}\\[0.1cm] File: \texttt{02\_onboarding\_modal.jpeg}}}\end{center}}
+\caption{Employee Onboarding Form Modal Submission}
+\end{figure}
+
+\subsubsection{Step 3: Saga Compensation Failure Demonstration}
+Attempt duplicate email onboarding; verify HTTP 502 \texttt{ONBOARDING\_FAILED} toast notification and Auth credential deletion [F-060].
+\begin{figure}[htbp]
+\centering
+\IfFileExists{03_saga_failed_toast.jpeg}{\includegraphics[width=0.85\linewidth]{03_saga_failed_toast.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 3: Saga Compensation Toast]}\\[0.1cm] File: \texttt{03\_saga\_failed\_toast.jpeg}}}\end{center}}
+\caption{Saga Reverse Compensation Error Toast Notification}
+\end{figure}
+
+\subsubsection{Step 4: Attendance Logging \& Early Logoff Detection}
+Log in as Employee; mark attendance on \texttt{/attendance} calendar grid; verify 9 AM--5 PM early logoff badge indicator.
+\begin{figure}[htbp]
+\centering
+\IfFileExists{04_attendance_calendar.jpeg}{\includegraphics[width=0.85\linewidth]{04_attendance_calendar.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 4: Attendance Calendar]}\\[0.1cm] File: \texttt{04\_attendance\_calendar.jpeg}}}\end{center}}
+\caption{Attendance Calendar View with Day-of-Week Grid}
+\end{figure}
+
+\subsubsection{Step 5: Leave Request Submission}
+Submit 3-day leave on \texttt{/leave}; verify weekday validation and balance deduction [F-030].
+\begin{figure}[htbp]
+\centering
+\IfFileExists{05_leave_application.jpeg}{\includegraphics[width=0.85\linewidth]{05_leave_application.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 5: Leave Application]}\\[0.1cm] File: \texttt{05\_leave\_application.jpeg}}}\end{center}}
+\caption{Leave Request Form and Balance Tracking}
+\end{figure}
+
+\subsubsection{Step 6: Manager Approval Workflow}
+Log in as Manager; approve pending leave on \texttt{/leave}; verify \texttt{LeaveApproved} outbox event creation [F-030].
+\begin{figure}[htbp]
+\centering
+\IfFileExists{06_manager_approval.jpeg}{\includegraphics[width=0.85\linewidth]{06_manager_approval.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 6: Manager Approval]}\\[0.1cm] File: \texttt{06\_manager\_approval.jpeg}}}\end{center}}
+\caption{Manager Team Leave Approval View}
+\end{figure}
+
+\subsubsection{Step 7: Batch Payroll Execution \& Payslip View}
+Log in as HR; execute batch monthly payroll on \texttt{/payroll}; verify payslip modal financial breakdown [F-031].
+\begin{figure}[htbp]
+\centering
+\IfFileExists{07_payroll_payslip.jpeg}{\includegraphics[width=0.85\linewidth]{07_payroll_payslip.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 7: Payroll \& Payslip Modal]}\\[0.1cm] File: \texttt{07\_payroll\_payslip.jpeg}}}\end{center}}
+\caption{Batch Monthly Payroll Execution and Payslip Modal}
+\end{figure}
+
+\subsubsection{Step 8: System Telemetry \& Container Audit}
+View \texttt{/system}; inspect live UP/DOWN container health checks across all microservices and infrastructure nodes [F-016].
+\begin{figure}[htbp]
+\centering
+\IfFileExists{08_system_telemetry.jpeg}{\includegraphics[width=0.85\linewidth]{08_system_telemetry.jpeg}}{\begin{center}\fbox{\parbox{0.8\linewidth}{\centering \textbf{[Step 8: System Telemetry Dashboard]}\\[0.1cm] File: \texttt{08\_system\_telemetry.jpeg}}}\end{center}}
+\caption{Real-Time Microservices Health Status Telemetry}
+\end{figure}
+
+\subsection{Failure Demonstration (Chaos Execution)}
+During Chaos Scenario S1, the Payroll service container was intentionally stopped (`docker stop payroll-service`) during an onboarding request [F-060]. The Employee Service detected the HTTP 500 failure, initiated a compensating `DELETE` request to the Auth service, set employee status to `ONBOARDING\_FAILED`, and returned HTTP 502 to the client within 0.43 seconds [F-060]. Zero orphaned records remained in `auth-db` or `payroll-db` [F-060].
+
+% --- SECTION 9 ---
+\section{Quality Verification \& Testing Results}
+
+\subsection{Testing Strategy \& Pyramid Breakdown}
+Quality verification followed a 5-tier test pyramid totaling 279 automated tests [F-035]--[F-046]. Table 6 outlines the test inventory across levels.
+
+\begin{table}[htbp]
+\caption{Automated Test Inventory by Level, Tool, and Count}
+\centering
+\begin{tabularx}{\linewidth}{l X X c c}
+\toprule
+\textbf{Test Level} & \textbf{Tool \& Runner} & \textbf{Target Area} & \textbf{Count} & \textbf{Pass Rate} \\
+\midrule
+\textbf{Unit (Backend)} & pytest 8.3.3 [F-026] & `libs/common` utilities [F-035] & 27 & 100.00\% \\
+\textbf{Unit \& UI (Frontend)} & Vitest 2.1.9 [F-025] & React components [F-045] & 99 & 100.00\% \\
+\textbf{Integration} & pytest 8.3.3 [F-026] & Microservice APIs [F-036] & 135 & 100.00\% \\
+\textbf{Contract} & pytest 8.3.3 [F-026] & Gateway routes [F-041] & 31 & 100.00\% \\
+\textbf{End-to-End (E2E)} & pytest 8.3.3 [F-026] & Workflow integration [F-042] & 7 & 100.00\% \\
+\textbf{Chaos} & pytest 8.3.3 [F-026] & Fault injection [F-043] & 6 & 100.00\% \\
+\textbf{Load} & k6 2.3.0 [F-027] & Load generation [F-044] & 3 & 100.00\% \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Code Coverage Results}
+Code coverage was audited using pytest-cov [F-047]--[F-053]. Table 7 presents statement coverage per target module.
+
+\begin{table}[htbp]
+\caption{Domain and Overall Statement Code Coverage Audit Results}
+\centering
+\begin{tabularx}{\linewidth}{l c c c c}
+\toprule
+\textbf{Target Service / Library} & \textbf{Overall Coverage \%} & \textbf{Domain Coverage \%} & \textbf{Passed Tests} & \textbf{Status} \\
+\midrule
+\textbf{libs/common} & 89.9\% [F-047] & N/A & 27 & PASSED \\
+\textbf{services/auth} & 82.5\% [F-048] & 100.0\% [F-048] & 13 & PASSED \\
+\textbf{services/employee} & 83.8\% [F-049] & 100.0\% [F-049] & 29 & PASSED \\
+\textbf{services/leave} & 76.6\% [F-050] & 98.1\% [F-050] & 29 & PASSED \\
+\textbf{services/payroll} & 85.8\% [F-051] & 98.5\% [F-051] & 23 & PASSED \\
+\textbf{services/notification} & 81.7\% [F-052] & 100.0\% [F-052] & 12 & PASSED \\
+\textbf{services/gateway} & 96.2\% [F-053] & 100.0\% [F-053] & 18 & PASSED \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Chaos Injection \& Resilience Results}
+Five automated chaos scenario tests were executed by injecting container and network failures [F-060]--[F-064]. Table 8 details chaos scenario results.
+
+\begin{table}[htbp]
+\caption{Chaos Fault Injection Scenarios, Failure Impact, and Measured Recovery Seconds}
+\centering
+\begin{tabularx}{\linewidth}{l X X c}
+\toprule
+\textbf{Scenario ID} & \textbf{Injected Failure} & \textbf{Observed System Behavior} & \textbf{Recovery Time} \\
+\midrule
+\textbf{Chaos S1} & Payroll service stopped [F-060] & 502 `ONBOARDING\_FAILED`, Auth deleted [F-060] & \textbf{0.43s} [F-060] \\
+\textbf{Chaos S2} & Auth service stopped [F-061] & 502 `ONBOARDING\_FAILED`, 0 orphans [F-061] & \textbf{0.43s} [F-061] \\
+\textbf{Chaos S3} & RabbitMQ broker down [F-062] & Leave approved, event flushed post-recovery & \textbf{6.13s} [F-062] \\
+\textbf{Chaos S4} & Notification down [F-063] & AMQP queue buffer, 0 duplicates [F-063] & \textbf{0.18s} [F-063] \\
+\textbf{Chaos S5} & Redis cache stopped [F-064] & Profile query succeeded via DB fallback & \textbf{N/A (Fallback)} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Load Testing \& Performance Results}
+Load testing was executed using k6 across four concurrent scenarios [F-054]--[F-058]. Table 9 details performance metrics.
+
+\begin{table}[htbp]
+\caption{Load Scenario Latencies, Throughput, Check Pass Rates, and Eventual Convergence}
+\centering
+\begin{tabularx}{\linewidth}{l X c c c}
+\toprule
+\textbf{Workload Scenario} & \textbf{Target Endpoint} & \textbf{Iterations} & \textbf{Average Latency} & \textbf{p(95) Latency} \\
+\midrule
+\textbf{`reads`} & `GET /employees` [F-054] & 1,729 & 13.83 ms [F-054] & \textbf{25.92 ms} [F-054] \\
+\textbf{`create\_leave`} & `POST /leaves` [F-055] & 4,940 & 75.64 ms [F-055] & \textbf{204.55 ms} [F-055] \\
+\textbf{`approve\_leave`} & `POST /leaves/{id}/approve` [F-056] & 4,940 & 52.12 ms [F-056] & \textbf{153.79 ms} [F-056] \\
+\textbf{`onboarding`} & `POST /employees` [F-057] & 120 & 269.40 ms [F-057] & \textbf{296.90 ms} [F-057] \\
+\midrule
+\textbf{Total / Summary} & All Endpoints [F-058] & 11,729 & N/A & \textbf{100.00\% Pass Rate} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Following load test execution, database outbox records and state deltas converged completely in \textbf{3.37 seconds} [F-059].
+
+\subsection{Defects Identified and Resolved}
+Four defects were identified during automated test auditing and resolved (`docs/BUG\_REPORTS.md`) [F-066]. Table 10 details the bug log.
+
+\begin{table}[htbp]
+\caption{Bug Identification Log, Detection Level, Root Cause, and Resolution}
+\centering
+\begin{tabularx}{\linewidth}{l c X X}
+\toprule
+\textbf{Bug ID} & \textbf{Severity} & \textbf{Root Cause} & \textbf{Technical Resolution} \\
+\midrule
+\textbf{BUG-001} & High & Invalid outbox function signature & Fixed argument signature in `libs/common` [F-066] \\
+\textbf{BUG-002} & High & FastAPI DB session closed prematurely & Moved `db.commit()` before yield dependency [F-066] \\
+\textbf{BUG-003} & High & Consumer reconnect loop terminated & Implemented exponential backoff loop [F-066] \\
+\textbf{BUG-004} & Medium & UI blank leave balance field mismatch & Aligned API schema transformer [F-066] \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Threats to Validity}
+\begin{enumerate}
+    \item \textbf{Single Workstation Execution}: Load and chaos tests executed on a single host machine hosting 15 containers [F-001]. Network latency reflects Docker bridge interface performance.
+    \item \textbf{Development Credentials}: Test execution utilized default development credentials from `.env.example` [F-068].
+    \item \textbf{No Multi-Day Soak Testing}: Performance testing was limited to 10--30 minute load bursts rather than multi-day endurance testing [F-054]--[F-058].
+\end{enumerate}
+
+% --- SECTION 10 ---
+\section{Individual Student Contribution \& AI Declarations}
+
+\subsection{Student Contribution Breakdown}
+Project work was completed by Sonu Reddy. Table 11 details individual contributions and repository evidence. Commit statistics were generated using `git shortlog -sn`.
+
+\begin{table}[htbp]
+\caption{Student Contribution, Assigned Tasks, and Verified Repository Evidence}
+\centering
+\begin{tabularx}{\linewidth}{l X X}
+\toprule
+\textbf{Student Name} & \textbf{Assigned Role \& Tasks} & \textbf{Verified Repository Evidence} \\
+\midrule
+\textbf{Sonu Reddy} & Architecture design, FastAPI backend, React UI, Saga implementation, pytest/Vitest test suites, chaos scripts, documentation & 32 commits across 295 repository files (`git shortlog -sn`) [F-069], [F-070] \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Honest Declaration of AI Assistance}
+Used \textbf{Antigravity (AI Coding Agent by Google DeepMind team)} to assist in refactoring microservice endpoints, writing Vitest component tests, configuring Docker Compose environment files, and resolving edge-case async test race conditions (`docs/STUDENT\_INPUTS.md:69-72`). All AI-generated code was thoroughly reviewed, tested against local Docker containers, validated via Vitest unit tests, and verified through GitHub Actions CI pipeline execution (`docs/STUDENT\_INPUTS.md:69-72`).
+
+% --- SECTION 11 ---
+\section{Conclusion, Limitations \& Future Work}
+
+\subsection{Achievement versus Objectives Summary}
+Table 12 evaluates final project achievements against the initial objectives established in Section 2.
+
+\begin{table}[htbp]
+\caption{Comparison of Initial Project Objectives against Final Measured Achievements}
+\centering
+\begin{tabularx}{\linewidth}{l X X c}
+\toprule
+\textbf{Objective} & \textbf{Initial Target} & \textbf{Final Measured Achievement} & \textbf{Status} \\
+\midrule
+\textbf{Decoupled Architecture} & Microservices isolation [F-001] & 15 containers running 6 microservices \& 5 DBs & ACHIEVED \\
+\textbf{Stateless Security} & JWT \& RBAC [F-028] & Nginx Gateway Bearer JWT validation & ACHIEVED \\
+\textbf{Attendance \& Logging} & Workday calendar \& rules & Grid with 9 AM--5 PM early logoff detection & ACHIEVED \\
+\textbf{Saga Orchestration} & Onboarding compensation & 0.43s reverse compensation on failure [F-060] & ACHIEVED \\
+\textbf{Low Latency} & Read latency $< 30$ ms & Read p(95) latency \textbf{25.92 ms} [F-054] & ACHIEVED \\
+\textbf{System Resilience} & 100\% test pass rate & 279 tests passing (100\%), green CI [F-067] & ACHIEVED \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{System Limitations}
+\begin{enumerate}
+    \item Reusing a failed onboarding email address currently returns an HTTP 409 conflict [F-068].
+    \item Rate limits at the API Gateway are shared across requests behind Nginx proxy [F-068].
+\end{enumerate}
+
+\subsection{Future Work (Not Implemented)}
+\begin{itemize}
+    \item \textbf{Apache Kafka Migration}: Replace AMQP outbox queues with Apache Kafka for permanent event log retention (Not Implemented).
+    \item \textbf{Kubernetes HPA Auto-Scaling}: Package microservices with Helm charts and deploy Horizontal Pod Autoscalers (Not Implemented).
+    \item \textbf{Distributed Tracing}: Integrate OpenTelemetry collectors and Jaeger backends for end-to-end trace visualization (Not Implemented).
+\end{itemize}
+
+% --- SECTION 12 ---
+\section{Technical Annexures \& References}
+
+\subsection{Annexure A: Complete API Endpoint Directory}
+\begin{itemize}
+    \item `POST /api/v1/auth/login`: Authenticate user and issue JWT token [F-028].
+    \item `POST /api/v1/employees`: Initiate employee onboarding saga (`POST /employees`) [F-029].
+    \item `GET /api/v1/employees`: Query employee directory with pagination [F-029].
+    \item `POST /api/v1/leave`: Submit leave request [F-030].
+    \item `POST /api/v1/leave/{id}/approve`: Approve leave request and stage outbox event [F-030].
+    \item `POST /api/v1/payroll/run`: Execute batch monthly payroll processing [F-031].
+    \item `GET /api/v1/notifications/{employee\_id}`: Retrieve notification history [F-032].
+\end{itemize}
+
+\subsection{Annexure B: AMQP Event Catalog \& Payloads}
+\begin{itemize}
+    \item \textbf{`EmployeeOnboarded`}: Published by Employee Service upon saga completion [F-033].
+    \item \textbf{`LeaveApproved`}: Published by Leave Service on approval; consumed by Payroll \& Notification [F-030], [F-034].
+    \item \textbf{`LeaveRejected`}: Published by Leave Service on rejection [F-030].
+    \item \textbf{`LeaveCancelled`}: Published by Leave Service on cancellation [F-030].
+\end{itemize}
+
+\subsection{Annexure C: Database Schemas per Service}
+\begin{itemize}
+    \item `auth-db`: `users` (id, email, password\_hash, role, created\_at) [F-005].
+    \item `employee-db`: `employees` (id, email, name, department, designation, manager\_id, status) [F-007].
+    \item `leave-db`: `leave\_requests` (id, employee\_id, start\_date, end\_date, leave\_type, status) [F-009].
+    \item `payroll-db`: `payroll\_profiles`, `payslips` (id, employee\_id, month, gross, deductions, net) [F-011].
+    \item `notification-db`: `notifications`, `processed\_events` [F-013].
+\end{itemize}
+
+\subsection{Annexure D: Environment Variable Catalog}
+\begin{itemize}
+    \item `DATABASE\_URL`: PostgreSQL connection string per microservice.
+    \item `RABBITMQ\_URL`: AMQP message broker connection URL [F-021].
+    \item `REDIS\_URL`: Redis caching node connection URL [F-022].
+    \item `JWT\_SECRET`: Secret key for signing and verifying Bearer JWT tokens [F-028].
+\end{itemize}
+
+\subsection{Annexure E: Automated Test Inventory Summary}
+\begin{itemize}
+    \item \textbf{Pytest Backend Tests}: 180 tests (`libs/common`: 27, `auth`: 13, `employee`: 29, `leave`: 29, `payroll`: 23, `notification`: 12, `contract`: 31, `e2e`: 7, `chaos`: 6, `load`: 3) [F-035]--[F-044].
+    \item \textbf{Vitest Frontend Tests}: 99 tests across 17 test files [F-045].
+\end{itemize}
+
+\subsection{Annexure F: Evidence Verification File List}
+\begin{itemize}
+    \item `docs/FACTS.md`: Source of truth repository metrics.
+    \item `docs/REQUIREMENTS.md`: Functional requirement mapping [R-001 through R-037].
+    \item `docs/TRACEABILITY.md`: Matrix mapping requirements to automated test node IDs.
+    \item `docs/COVERAGE.md`: Code statement coverage audit report [F-047]--[F-053].
+    \item `docs/LOAD\_RESULTS.md`: k6 performance load test results [F-054]--[F-059].
+    \item `docs/CHAOS\_RESULTS.md`: Automated chaos fault injection results [F-060]--[F-065].
+    \item `docs/BUG\_REPORTS.md`: System defect logs and technical resolutions [F-066].
+\end{itemize}
+
+\subsection{Annexure G: Bug Reports Summary}
+Link: `docs/BUG\_REPORTS.md` [F-066]. Resolved 4 high/medium severity system defects during audit.
+
+\subsection{Annexure H: Setup and Execution Instructions}
+\begin{enumerate}
+    \item Build and start containers: `docker compose up -d --build` [F-001].
+    \item Execute backend tests: `pytest` [F-035].
+    \item Execute frontend tests: `npm test` inside `frontend/` [F-045].
+    \item Run load testing suite: `k6 run tests/load/script.js` [F-044].
+\end{enumerate}
+
+\subsection{Annexure I: Technical Glossary}
+\begin{itemize}
+    \item \textbf{ASGI}: Asynchronous Server Gateway Interface.
+    \item \textbf{AMQP}: Advanced Message Queuing Protocol.
+    \item \textbf{JWT}: JSON Web Token.
+    \item \textbf{RBAC}: Role-Based Access Control.
+    \item \textbf{Saga}: Distributed transaction pattern managing local transactions and compensating rollbacks.
+\end{itemize}
+
+\subsection{Annexure J: Academic \& Technical References}
+\begin{enumerate}
+    \item Tanenbaum, A. S., \& van Steen, M. (2017). \textit{Distributed Systems: Principles and Paradigms} (3rd ed.). Distributed-Systems.net.
+    \item Richardson, C. (2018). \textit{Microservices Patterns: With examples in Java}. Manning Publications.
+    \item Kleppmann, M. (2017). \textit{Designing Data-Intensive Applications: The Big Ideas Behind Reliable, Scalable, and Maintainable Systems}. O'Reilly Media.
+    \item Garcia-Molina, H., \& Salem, K. (1987). Sagas. \textit{ACM SIGMOD Record}, 16(3), 249-259.
+    \item Gilbert, S., \& Lynch, N. (2002). Brewer's conjecture and the feasibility of consistent, available, partition-tolerant web services. \textit{ACM SIGACT News}, 33(2), 51-59.
+    \item Nygard, M. T. (2018). \textit{Release It!: Design and Deploy Production-Ready Software} (2nd ed.). Pragmatic Bookshelf.
+    \item FastAPI Official Documentation: \url{https://fastapi.tiangolo.com/}
+    \item PostgreSQL Official Documentation: \url{https://www.postgresql.org/docs/}
+    \item RabbitMQ Official Documentation: \url{https://www.rabbitmq.com/documentation.html}
+    \item Redis Official Documentation: \url{https://redis.io/documentation}
+    \item Docker Official Documentation: \url{https://docs.docker.com/}
+    \item Prometheus Official Documentation: \url{https://prometheus.io/docs/}
+    \item Grafana Official Documentation: \url{https://grafana.com/docs/}
+    \item k6 Load Testing Documentation: \url{https://k6.io/docs/}
+    \item Playwright Documentation: \url{https://playwright.dev/}
+    \item React Official Documentation: \url{https://react.dev/}
+\end{enumerate}
+
+\end{document}

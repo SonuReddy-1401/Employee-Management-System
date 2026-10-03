@@ -96,7 +96,7 @@ describe('Employees Page Component', () => {
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Bob Fail' } });
     fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'fail@ems.com' } });
     fireEvent.change(screen.getByLabelText(/^department \*/i), { target: { value: 'QA' } });
-    fireEvent.change(screen.getByLabelText(/designation/i), { target: { value: 'Tester' } });
+    fireEvent.change(screen.getByLabelText(/^designation \*/i), { target: { value: 'Tester' } });
     fireEvent.change(screen.getByLabelText(/initial password/i), { target: { value: 'Password123!' } });
     fireEvent.change(screen.getByLabelText(/monthly salary/i), { target: { value: '4000' } });
 
@@ -136,7 +136,7 @@ describe('Employees Page Component', () => {
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Single Post' } });
     fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'single@ems.com' } });
     fireEvent.change(screen.getByLabelText(/^department \*/i), { target: { value: 'Dev' } });
-    fireEvent.change(screen.getByLabelText(/designation/i), { target: { value: 'Dev' } });
+    fireEvent.change(screen.getByLabelText(/^designation \*/i), { target: { value: 'Dev' } });
     fireEvent.change(screen.getByLabelText(/initial password/i), { target: { value: 'Password123!' } });
     fireEvent.change(screen.getByLabelText(/monthly salary/i), { target: { value: '4000' } });
 

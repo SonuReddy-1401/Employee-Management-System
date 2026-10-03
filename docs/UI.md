@@ -28,7 +28,7 @@
 ```text
 frontend/
 ├── Dockerfile              # Multi-stage build (Node build -> Nginx serve)
-├── nginx.conf              # SPA fallback, /api/ reverse proxy, /status/* proxies
+├── nginx.conf              # SPA fallback, /api/ reverse proxy, /status/* proxies with dynamic Docker DNS resolver (127.0.0.11)
 ├── package.json            # Dependencies & scripts
 ├── package-lock.json       # Pinned dependency locks
 ├── vite.config.js          # Vite & Vitest configuration
