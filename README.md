@@ -248,7 +248,6 @@ The continuous integration pipeline executes automatically on GitHub Actions:
 | [`docs/INDEX.md`](file:///s:/CLG/DS/ems/docs/INDEX.md) | Ordered reading guide for project review and examination. |
 | [`docs/LOAD_RESULTS.md`](file:///s:/CLG/DS/ems/docs/LOAD_RESULTS.md) | k6 load test latency percentiles, throughput, and database convergence metrics `[F-054]`–`[F-059]`. |
 | [`docs/REQUIREMENTS.md`](file:///s:/CLG/DS/ems/docs/REQUIREMENTS.md) | Functional and non-functional system requirements specification. |
-| [`docs/STUDENT_INPUTS.md`](file:///s:/CLG/DS/ems/docs/STUDENT_INPUTS.md) | Academic review details, individual contributions, and CI run evidence `[F-067]`. |
 | [`docs/TEST_PLAN.md`](file:///s:/CLG/DS/ems/docs/TEST_PLAN.md) | Strategy, environment setups, and test suite breakdowns across all levels. |
 | [`docs/TRACEABILITY.md`](file:///s:/CLG/DS/ems/docs/TRACEABILITY.md) | Matrix linking system requirements to implementation code and test specifications. |
 | [`docs/UI.md`](file:///s:/CLG/DS/ems/docs/UI.md) | Frontend component specs, page layouts, permission matrices, and constraints. |

@@ -42,5 +42,4 @@ For a complete academic and technical audit of the codebase, contracts, testing,
 8. **[`docs/CHAOS_RESULTS.md`](file:///s:/CLG/DS/ems/docs/CHAOS_RESULTS.md)**: Fault-injection test outcomes (database outages, broker failures, Redis fallbacks) and recovery time measurements `[F-060]`–`[F-065]`.
 9. **[`docs/LOAD_RESULTS.md`](file:///s:/CLG/DS/ems/docs/LOAD_RESULTS.md)**: Performance benchmarks measured with k6 load runner `[F-027]`, including request latencies, throughput, and database state convergence `[F-054]`–`[F-059]`.
 10. **[`docs/CI.md`](file:///s:/CLG/DS/ems/docs/CI.md)**: GitHub Actions continuous integration pipeline architecture and automated execution summary `[F-067]`.
-11. **[`docs/STUDENT_INPUTS.md`](file:///s:/CLG/DS/ems/docs/STUDENT_INPUTS.md)**: Academic project overview, review summaries, individual contributions, and green CI pipeline run URL `[F-067]`.
-12. **[`docs/DOC_RULES.md`](file:///s:/CLG/DS/ems/docs/DOC_RULES.md)**: Documentation standards, fact citation rules, and verification criteria.
+11. **[`docs/DOC_RULES.md`](file:///s:/CLG/DS/ems/docs/DOC_RULES.md)**: Documentation standards, fact citation rules, and verification criteria.
