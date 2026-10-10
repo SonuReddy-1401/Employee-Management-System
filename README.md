@@ -245,7 +245,7 @@ The continuous integration pipeline executes automatically on GitHub Actions:
 | [`docs/DEMO.md`](file:///s:/CLG/DS/ems/docs/DEMO.md) | Step-by-step UI demonstration guide for supported roles `[F-068]`. |
 | [`docs/DOC_RULES.md`](file:///s:/CLG/DS/ems/docs/DOC_RULES.md) | Rules and verification guidelines for documentation consistency. |
 | [`docs/FACTS.md`](file:///s:/CLG/DS/ems/docs/FACTS.md) | Single source of truth for facts, metrics, and citations `[F-001]`–`[F-070]`. |
-| [`docs/INDEX.md`](file:///s:/CLG/DS/ems/docs/INDEX.md) | Ordered reading guide for project review and examination. |
+| [`docs/INDEX.md`](file:///s:/CLG/DS/ems/docs/INDEX.md) | Ordered reading guide for project review and also examination. |
 | [`docs/LOAD_RESULTS.md`](file:///s:/CLG/DS/ems/docs/LOAD_RESULTS.md) | k6 load test latency percentiles, throughput, and database convergence metrics `[F-054]`–`[F-059]`. |
 | [`docs/REQUIREMENTS.md`](file:///s:/CLG/DS/ems/docs/REQUIREMENTS.md) | Functional and non-functional system requirements specification. |
 | [`docs/TEST_PLAN.md`](file:///s:/CLG/DS/ems/docs/TEST_PLAN.md) | Strategy, environment setups, and test suite breakdowns across all levels. |
